@@ -1,4 +1,4 @@
-# Goblin Game [name tbd]
+# Pugs Adventures
 
 This is a game revolving around a goblin that no longer wishes to serve in a dungeon.
 
