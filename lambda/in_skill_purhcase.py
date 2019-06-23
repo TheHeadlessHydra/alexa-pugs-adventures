@@ -39,44 +39,6 @@ def get_product_list(handler_input):
     return list_of_products
 
 
-def upsell_return_object(return_object, handler_input, session):
-    tsundere_mode_purchased = is_product_purchased(handler_input, ProductName.TSUNDERE_MODE)
-    cafe_date_purchased = is_product_purchased(handler_input, ProductName.CAFE_DATE)
-    tsundere_mode_purchasable = is_product_purchasable(handler_input, ProductName.TSUNDERE_MODE)
-    cafe_date_purchasable = is_product_purchasable(handler_input, ProductName.CAFE_DATE)
-
-    total_number_of_utterances = session.get_total_number_of_utterances()
-
-    if total_number_of_utterances != 5 and \
-            (total_number_of_utterances == 0 or total_number_of_utterances % Config.upsell_mod != 0):
-        return return_object
-
-    if not tsundere_mode_purchased and tsundere_mode_purchasable and not cafe_date_purchased and cafe_date_purchasable:
-        random_choice_index = random.randrange(1, 3)
-        if random_choice_index == 1:
-            return add_upsell_to_output(return_object,
-                                        get_product_id(handler_input, ProductName.TSUNDERE_MODE),
-                                        "If you are enjoying talking with Aiko Chan, you can get the Tsundere Mode voice pack. "
-                                        "Do you want to learn more?")
-        else:
-            return add_upsell_to_output(return_object,
-                                        get_product_id(handler_input, ProductName.CAFE_DATE),
-                                        "If you are enjoying talking with Aiko Chan, you can go on a date with her too! "
-                                        "Do you want to learn more?")
-    if not tsundere_mode_purchased and tsundere_mode_purchasable and not cafe_date_purchasable:
-        return add_upsell_to_output(return_object,
-                                    get_product_id(handler_input, ProductName.TSUNDERE_MODE),
-                                    "If you are enjoying talking with Aiko Chan, you can get the Tsundere Mode voice pack. "
-                                    "Do you want to learn more?")
-    if not cafe_date_purchased and cafe_date_purchasable and not tsundere_mode_purchasable:
-        return add_upsell_to_output(return_object,
-                                    get_product_id(handler_input, ProductName.CAFE_DATE),
-                                    "If you are enjoying talking with Aiko Chan, you can go on a date with her too! "
-                                    "Do you want to learn more?")
-    else:
-        return return_object
-
-
 def is_product_purchasable(handler_input, product_name):
     product_purchasable = False
     product_list = get_product_list(handler_input)

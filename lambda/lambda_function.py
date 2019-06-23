@@ -9,6 +9,7 @@ from session_state_builder import *
 from cannot_build_state_machine_exception import *
 from state_machine_launch import *
 from state_machine_common import *
+from in_skill_purhcase import *
 
 from ask_sdk_core.api_client import DefaultApiClient
 from ask_sdk_core.attributes_manager import AttributesManager, AbstractPersistenceAdapter
@@ -39,6 +40,13 @@ def lambda_handler(event, context):
         input_action = event['request']['intent']['name']
     elif event['request']['type'] == "SessionEndedRequest":
         input_action = "SessionEndedRequest"
+    elif event['request']['type'] == "Connections.Response":
+        print(event)
+        send_request_target = event['request']['name']  # one of Upsell, Buy or Cancel
+        purchase_result = event['request']['payload']['purchaseResult']  # ACCEPTED, DECLINED, ALREADY_PURCHASED, ERROR
+        product_id = event['request']['payload']['productId']
+        input_action = purchase_result
+        override_source = get_directive_action_mapping(send_request_target, product_id)
     else:
         logging.error("Unknown request type in event: " + str(event))
         raise ValueError("Unknown request type")
@@ -53,11 +61,11 @@ def lambda_handler(event, context):
     print(event)
     try:
         state_machine = get_state_machine_from_session(event['session'], input_action, storage)
+        decorate_and_validate_session_is_purchased(handler_input, state_machine.session)
     except CannotBuildStateMachineException:
         state_machine = initialize_new_game_not_understood()
 
-    print("state_machine:")
-    print(state_machine)
+    print("state_machine: {}".format(state_machine))
 
     return_object = state_machine.next(input_action)
     print(return_object)
@@ -76,11 +84,12 @@ def clean_intent_action(intent_action):
         return intent_action
 
 
-def get_state_machine_from_session(alexa_session, input_action, storage):
+def get_state_machine_from_session(alexa_session, input_action, storage, handler_input, override_source=None):
     """ If there is a state in the session, recover it.
     If there is no state in the session, try to recover it from storage.
     If there is no session state in storage, start a new session.
     If this is a STOP intent, write the session state out to storage.
+    override_source tells the state machine to start from a specific state
     """
 
     if 'user' not in alexa_session and 'userId' not in alexa_session['user']:
@@ -92,8 +101,17 @@ def get_state_machine_from_session(alexa_session, input_action, storage):
         session_state_json_string = storage.get_json_string(user_id)
 
         if session_state_json_string is None:
-            print("No session state found in request. Starting from scratch")
-            return initialize_new_state_machine_from_input(user_id, input_action)
+            print("No session state found. Starting from scratch")
+            # supersede if certain intents are called. End session and write state to storage.
+            state_machine = supersede_build_state_machine(input_action, Session(SessionState(user_id)))
+            if state_machine is not None:
+                return state_machine
+
+            if override_source is None:
+                return initialize_new_state_machine_from_input(input_action, user_id=user_id)
+            else:
+                return build_state_machine_from_source(override_source, user_id=user_id)
+
     else:
         session_state_json_string = alexa_session['attributes']
 
@@ -107,7 +125,11 @@ def get_state_machine_from_session(alexa_session, input_action, storage):
         state_machine = supersede_build_state_machine(input_action, session)
         if state_machine is not None:
             return state_machine
-        return rebuild_state_machine_from_session(session)
+
+        if override_source is None:
+            return rebuild_state_machine_from_session(input_action, session)
+        else:
+            return build_state_machine_from_source(override_source, session=session)
     except ValidationException:
         message = "Invalid state stored: " + str(session_state_json_string)
         print(message)
@@ -149,6 +171,27 @@ def get_handler_input(event, context):
         service_client_factory=factory)
 
     return handler_input
+
+
+def get_directive_action_mapping(send_request_target, product_id):
+    if send_request_target == "Upsell":
+        if product_id == KEEPER_TRAPPER_PRODUCT_ID:
+            return "DirectiveResponseBuyKeeperTrapper"
+        else:
+            raise Exception("Unknown product id: {}".format(product_id))
+    elif send_request_target == "Buy":
+        if product_id == KEEPER_TRAPPER_PRODUCT_ID:
+            return "DirectiveResponseBuyKeeperTrapperMode"
+        else:
+            raise Exception("Unknown product id: {}".format(product_id))
+    elif send_request_target == "Cancel":
+        if product_id == KEEPER_TRAPPER_PRODUCT_ID:
+            return "DirectiveResponseCancelKeeperTrapper"
+        else:
+            raise Exception("Unknown product id: {}".format(product_id))
+    else:
+        raise Exception("Unknown send_request_target id: {}".format(send_request_target))
+
 
 def save_game(session, storage):
     user_id = session.get_user_id_serializable()
