@@ -11,7 +11,7 @@ logger = logging.getLogger()
 
 # TODO: teach about describing inventory and option menu
 class GoblinTownPugsHome(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(GoblinTownPugsHome, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -101,7 +101,7 @@ class GoblinTownPugsHome(State):
 
 
 class GoblinTownCenter(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(GoblinTownCenter, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -143,7 +143,7 @@ class GoblinTownCenter(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 class GoblinTownMines(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(GoblinTownMines, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -223,7 +223,7 @@ class GoblinTownMines(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 class GoblinTownTradingPost(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(GoblinTownTradingPost, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -374,7 +374,7 @@ class GoblinTownTradingPost(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 class GoblinTownChowHall(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(GoblinTownChowHall, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action

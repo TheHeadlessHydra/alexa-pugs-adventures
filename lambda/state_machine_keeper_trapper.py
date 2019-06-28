@@ -9,8 +9,9 @@ from state_machine_ending import *
 
 logger = logging.getLogger()
 
+
 class KeeperTrapperExecutiveWashroom(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperExecutiveWashroom, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -169,7 +170,7 @@ class KeeperTrapperExecutiveWashroom(State):
 
 
 class KeeperTrapperReception(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperReception, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -275,7 +276,7 @@ class KeeperTrapperReception(State):
 
 
 class KeeperTrapperBoardRoom(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperBoardRoom, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -382,7 +383,7 @@ class KeeperTrapperBoardRoom(State):
 
 
 class KeeperTrapperCEOsRoom(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperCEOsRoom, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -618,7 +619,7 @@ class KeeperTrapperCEOsRoom(State):
 
 
 class KeeperTrapperElevator(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperElevator, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -652,7 +653,7 @@ class KeeperTrapperElevator(State):
 
 # TODO add hints inbetween sections by asking again, etc.
 class KeeperTrapperRNDND(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperRNDND, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -782,7 +783,7 @@ class KeeperTrapperRNDND(State):
 
 
 class KeeperTrapperWorkstation(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperWorkstation, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -863,7 +864,7 @@ class KeeperTrapperWorkstation(State):
 
 
 class KeeperTrapperNetRoom(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(KeeperTrapperNetRoom, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action

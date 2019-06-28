@@ -27,13 +27,5 @@ class StateMachine:
     def get_session(self):
         return self.session
 
-    def next(self, input):
-        return self.current_state.next(input, self.session)
-
-    def next_all(self, inputs):
-        for i in inputs:
-            print(i)
-            action_to_take = self.current_state.next(i)
-            print(action_to_take)
-            self.list_of_actions.append(action_to_take)
-            self.current_state = action_to_take['sessionAttributes']['next_state']
+    def next(self, input, handler_input):
+        return self.current_state.next(input, self.session, handler_input)

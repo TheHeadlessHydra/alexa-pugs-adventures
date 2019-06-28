@@ -96,7 +96,7 @@ def initialize_new_options_menu(session):
 
 class OptionsMenu(State):
     """The options menu of the game"""
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         card_title = "Options"
         should_end_session = False
 

@@ -6,6 +6,7 @@ All helper methods to interact with the Alexa JSON object model.
 from session_state_builder import *
 from storage_factory import *
 from session_state_builder import *
+import uuid
 
 INITIALIZE = "Initialize"
 RETURN = "Return"
@@ -214,14 +215,20 @@ def save_game(session):
 
 # --------------- builders ------------------
 
-def get_action_response(session, card_title, speech_output, reprompt_text, should_end_session):
+
+def get_action_response(session, card_title, speech_output, reprompt_text, should_end_session, buy_product_id=None,
+                        cancel_product_id=None):
     session_state_json = session_to_json_string(session)
     return build_response(session_state_json, build_speechlet_response(
-        card_title, speech_output, reprompt_text, should_end_session))
+        card_title, speech_output, reprompt_text, should_end_session, buy_product_id, cancel_product_id))
 
 
-def build_speechlet_response(title, output, reprompt_text, should_end_session):
-    outputJson = {
+def build_speechlet_response(title,
+                             output,
+                             reprompt_text,
+                             should_end_session,
+                             buy_product_id=None, cancel_product_id=None):
+    output_json = {
         'outputSpeech': {
             'type': 'SSML',
             'ssml': output
@@ -238,7 +245,33 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
         },
         'shouldEndSession': should_end_session
     }
-    return outputJson
+    if buy_product_id is not None:
+        output_json['directives'] = [
+            {
+                "type": "Connections.SendRequest",
+                "name": "Buy",
+                "payload": {
+                    "InSkillProduct": {
+                        "productId": buy_product_id
+                    }
+                },
+                "token": "correlationToken"
+            }
+        ]
+    if cancel_product_id is not None:
+        output_json['directives'] = [
+            {
+                "type": "Connections.SendRequest",
+                "name": "Cancel",
+                "payload": {
+                    "InSkillProduct": {
+                        "productId": cancel_product_id
+                    }
+                },
+                "token": "correlationToken"
+            }
+        ]
+    return output_json
 
 
 def build_response(session_attributes, speechlet_response):
@@ -247,6 +280,23 @@ def build_response(session_attributes, speechlet_response):
         'sessionAttributes': session_attributes,
         'response': speechlet_response
     }
+
+
+def add_upsell_to_output(output_json, upsell_product_id, upsell_message):
+    output_json['response']['directives'] = [
+        {
+            "type": "Connections.SendRequest",
+            "name": "Upsell",
+            "payload": {
+                "InSkillProduct": {
+                    "productId": upsell_product_id
+                },
+                "upsellMessage": upsell_message
+            },
+            "token": str(uuid.uuid1())
+        }
+    ]
+    return output_json
 
 
 class ValidationException(Exception):

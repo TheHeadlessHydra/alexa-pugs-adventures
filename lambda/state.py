@@ -10,7 +10,7 @@ from state_machine_helpers import *
 
 
 class State(object):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
 
         # Import controls that can happen anywhere
         if input_action == COMMON_DESCRIBE_INVENTORY:

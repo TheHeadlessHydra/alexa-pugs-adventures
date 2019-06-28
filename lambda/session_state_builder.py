@@ -9,15 +9,16 @@ from session import *
 
 # ------------------- Converting from json to session_state itself ------------------
 
+
 def session_to_json_string(session):
     """Must convert from the Session class to the SessionState class, then serialized to json for storage.
 
     :param session: a PrettySession object to convert to SessionState
     :return: json of the session_state to store
     """
-    print "converting Session to SessionState"
+    print("converting Session to SessionState")
     session_state = session.get_session_state()
-    print "serializing SessionState to json"
+    print("serializing SessionState to json")
     return json.loads(jsonpickle.encode(session_state))
 
 
@@ -27,14 +28,15 @@ def json_string_to_session(session_state_json):
     :param session_state_json: json to deserialize
     :return: a Session object that houses the players session
     """
-    print "deserializing session state to json"
+    print("deserializing session state to json")
     session_state_json = json.dumps(session_state_json)
-    print "deserializing session state json to session_state"
+    print("deserializing session state json to session_state")
     session_state = jsonpickle.decode(session_state_json)
-    print "running schema converter on session state"
+    print("running schema converter on session state")
     session_state = session_state_schema_converter(session_state)
-    print "converting SessionState to Session"
+    print("converting SessionState to Session")
     return Session(session_state)
+
 
 def session_state_schema_converter(session_state):
     """

@@ -7,11 +7,14 @@ from events import *
 import logging
 import random
 from state_machine_keeper_trapper import *
+from state_machine_ending import *
+
 
 logger = logging.getLogger()
 
+
 class PiranhaParadiseVisitorCenter(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(PiranhaParadiseVisitorCenter, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -115,7 +118,7 @@ class PiranhaParadiseVisitorCenter(State):
 # --------------- Lost and found ------------------
 
 class LostAndFoundCorpses(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(LostAndFoundCorpses, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -167,7 +170,7 @@ class LostAndFoundCorpses(State):
 
 
 class RangerCorpse(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(RangerCorpse, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -234,7 +237,7 @@ class RangerCorpse(State):
 
 
 class DruidCorpse(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(DruidCorpse, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -305,7 +308,7 @@ class DruidCorpse(State):
 # --------------- Piranha paradise aquarium ------------------
 
 class PiranhaParadiseAquarium(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(PiranhaParadiseAquarium, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -371,7 +374,7 @@ class PiranhaParadiseAquarium(State):
 
 
 class AquariumOnTopOfTheTank(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(AquariumOnTopOfTheTank, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action
@@ -417,7 +420,10 @@ class AquariumOnTopOfTheTank(State):
                 "taste like. Who knows. He's a goblin. What should Pug do next?")
         elif input_action == AQUARIUM_ENTER_WATER:
             if session.get_event_inventory().exists(Events.piranhas_all_gone):
-                return KeeperTrapperExecutiveWashroom().next(RETURN, session)
+                if session.get_is_keeper_trapper_purchased():
+                    return KeeperTrapperExecutiveWashroom().next(RETURN, session)
+                else:
+                    return EndingState().next(RETURN, session)
             else:
                 speech_output = wrap_with_speak(
                     "Pug dips a toe into the water, which immediately begins getting bitten by ravenous piranhas. "
@@ -459,7 +465,7 @@ class AquariumOnTopOfTheTank(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 class MaintenanceSwitchboard(State):
-    def next(self, input_action, session):
+    def next(self, input_action, session, handler_input):
         overriding_action = super(MaintenanceSwitchboard, self).next(input_action, session)
         if overriding_action is not None:
             return overriding_action

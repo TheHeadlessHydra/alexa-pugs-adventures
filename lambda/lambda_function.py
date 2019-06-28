@@ -9,7 +9,7 @@ from session_state_builder import *
 from cannot_build_state_machine_exception import *
 from state_machine_launch import *
 from state_machine_common import *
-from in_skill_purhcase import *
+from in_skill_purchase import *
 
 from ask_sdk_core.api_client import DefaultApiClient
 from ask_sdk_core.attributes_manager import AttributesManager, AbstractPersistenceAdapter
@@ -34,6 +34,7 @@ def lambda_handler(event, context):
 
     handler_input = get_handler_input(event, context)
 
+    override_source = None
     if event['request']['type'] == "LaunchRequest":
         input_action = "LaunchRequest"
     elif event['request']['type'] == "IntentRequest":
@@ -60,7 +61,8 @@ def lambda_handler(event, context):
     print(input_action)
     print(event)
     try:
-        state_machine = get_state_machine_from_session(event['session'], input_action, storage)
+        state_machine = get_state_machine_from_session(
+            event['session'], input_action, storage, handler_input, override_source)
         decorate_and_validate_session_is_purchased(handler_input, state_machine.session)
     except CannotBuildStateMachineException:
         state_machine = initialize_new_game_not_understood()
