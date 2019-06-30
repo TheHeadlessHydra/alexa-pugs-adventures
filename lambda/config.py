@@ -16,5 +16,5 @@ class Config(object):
     storage_layer = "DynamoStorage"
 
     # ------------------- dynamodb storage configs -------------------
-    table_name = "pugs_adventures_sessions"
+    table_name = "goblin_game_sessions"
     region = "us-east-1"
