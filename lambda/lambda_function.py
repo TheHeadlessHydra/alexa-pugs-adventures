@@ -63,7 +63,10 @@ def lambda_handler(event, context):
     try:
         state_machine = get_state_machine_from_session(
             event['session'], input_action, storage, handler_input, override_source)
-        decorate_and_validate_session_is_purchased(handler_input, state_machine.session)
+
+        override_state_machine = decorate_and_validate_session_is_purchased(handler_input, state_machine.session)
+        if override_state_machine:
+            state_machine = Game(EndingStateAquarium(), state_machine.session)
     except CannotBuildStateMachineException:
         state_machine = initialize_new_game_not_understood()
 
@@ -75,6 +78,8 @@ def lambda_handler(event, context):
 
     session = state_machine.get_session()
     save_game(session, storage)
+
+    print("PROPER END AFTER STORAGE========================")
 
     return return_object
 

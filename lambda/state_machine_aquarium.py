@@ -7,7 +7,7 @@ from events import *
 import logging
 import random
 from state_machine_keeper_trapper import *
-from state_machine_ending import *
+from in_skill_purchase import KEEPER_TRAPPER_PRODUCT_ID
 
 
 logger = logging.getLogger()
@@ -216,7 +216,7 @@ class RangerCorpse(State):
                 "No, it's probably better to quit cold turkey. What should Pug do next?")
         elif input_action == LOST_AND_FOUND_TAKE_BOW and not session.get_event_inventory().exists(
                 Events.attempted_to_take_bow):
-            session.get_item_inventory().add(Events.attempted_to_take_bow)
+            session.get_event_inventory().add(Events.attempted_to_take_bow)
             speech_output = wrap_with_speak(
                 "Pug pulls the bow from the hands of the ranger. He stares at the bow for a few seconds. <break "
                 "time=\"1s\"/> He suddenly realizes he shouldn't have spent all those years in the Goblin Scouts "
@@ -423,7 +423,7 @@ class AquariumOnTopOfTheTank(State):
                 if session.get_is_keeper_trapper_purchased():
                     return KeeperTrapperExecutiveWashroom().next(RETURN, session, handler_input)
                 else:
-                    return EndingState().next(RETURN, session, handler_input)
+                    return EndingStateAquarium().next(RETURN, session, handler_input)
             else:
                 speech_output = wrap_with_speak(
                     "Pug dips a toe into the water, which immediately begins getting bitten by ravenous piranhas. "
@@ -463,6 +463,7 @@ class AquariumOnTopOfTheTank(State):
 
         session.set_stored_game_state(self.__class__.__name__)
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
+
 
 class MaintenanceSwitchboard(State):
     def next(self, input_action, session, handler_input):
@@ -618,3 +619,60 @@ class MaintenanceSwitchboard(State):
 
         session.set_stored_game_state(self.__class__.__name__)
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
+
+
+class EndingStateAquarium(State):
+    def next(self, input_action, session, handler_input):
+        overriding_action = super(EndingStateAquarium, self).next(input_action, session, handler_input)
+        if overriding_action is not None:
+            return overriding_action
+
+        should_end_session = False
+        card_title = "Ending screen"
+        reprompt_text = wrap_with_speak(
+            "You are in the end game screen. You really can't do much here other than"
+            "open the options menu to restart the game or exit the game. What would you like to do now?")
+
+        if not session.is_location_seen_before(self.__class__.__name__):
+            session.new_seen_location(self.__class__.__name__)
+            if session.get_is_keeper_trapper_purchased():
+                return KeeperTrapperExecutiveWashroom().next(input_action, session, handler_input)
+            elif not session.get_is_keeper_trapper_purchased() and session.get_is_keeper_trapper_purchasable():
+                    speech_output=wrap_with_speak(
+                        "Congratulations! You've completed Pug's Adventures. Thank you very much for playing our game. If you "
+                        "enjoyed the game, please leave us a rating or comment. "
+                        "You can open up the Options menu by saying open "
+                        "options menu. That will let you restart the game anytime. You can also exit the game normally "
+                        "by telling Alexa to exit.")
+            else:
+                speech_output = wrap_with_speak(
+                    "Congratulations! You've completed Pug's Adventures. Thank you very much for playing our game. If you "
+                    "enjoyed the game, please leave us a rating or comment. Unfortunately, the next level of Pug's "
+                    "adventures, Keeper Trapper LLC, is not available for purchase in your region. "
+                    "You can open up the Options menu by saying open "
+                    "options menu. That will let you restart the game anytime. You can also exit the game normally "
+                    "by telling Alexa to exit. Really not much else to do here, "
+                    "to be honest. Thanks again for playing! What would you like to do now?")
+        else:
+            if session.get_is_keeper_trapper_purchased():
+                return KeeperTrapperExecutiveWashroom().next(input_action, session, handler_input)
+            elif not session.get_is_keeper_trapper_purchased() and session.get_is_keeper_trapper_purchasable():
+                speech_output = wrap_with_speak(
+                    "Welcome back to the ending screen! You can open up the Options menu by saying open "
+                    "options menu. That will let you restart the game anytime. We promise there's no secret dialogue "
+                    "between Pug and Mad Mage " + Config.mad_mage_name + " or anything. ")
+            else:
+                speech_output = wrap_with_speak(
+                    "Welcome back to the ending screen! We are sorry, the next level of Pug's Adventures is not "
+                    "available in your region. You can open up the Options menu by saying open "
+                    "options menu. That will let you restart the game anytime. We promise there's no secret dialogue "
+                    "between Pug and Mad Mage " + Config.mad_mage_name + " or anything. What would you like to do now?")
+
+        session.set_stored_game_state(self.__class__.__name__)
+        return_object = get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
+        if not session.get_is_keeper_trapper_purchased() and session.get_is_keeper_trapper_purchasable():
+            return_object = add_upsell_to_output(
+                return_object, KEEPER_TRAPPER_PRODUCT_ID,
+                "If you are enjoying the game so far, there is the next level, level 3, KEEPER TRAPPER LLC. "
+                "Do you want to learn more?")
+        return return_object

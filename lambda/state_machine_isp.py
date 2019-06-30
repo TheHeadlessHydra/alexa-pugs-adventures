@@ -82,7 +82,7 @@ class ISPBuyKeeperTrapper(State):
 class ISPReturnKeeperTrapper(State):
     def next(self, input_action, session, handler_input):
         card_title = "Return Keeper Trapper"
-        product_id = get_product_id(handler_input, ProductName.TSUNDERE_MODE)
+        product_id = get_product_id(handler_input, ProductName.KEEPER_TRAPPER)
 
         if product_id is not None:
             speech_output = wrap_with_speak("")
@@ -105,7 +105,7 @@ class DirectiveResponseBuyKeeperTrapperMode(State):
         card_title = "Buying Keeper Trapper"
 
         if input_action == "ACCEPTED":
-            if session.get_stored_game_state() == "EndingState":
+            if session.get_stored_game_state() == "EndingStateAquarium":
                 return KeeperTrapperExecutiveWashroom().next(input_action, session, handler_input)
             else:
                 speech_output = wrap_with_speak("In order to play level three, Keeper Trapper LLC, "
@@ -122,7 +122,29 @@ class DirectiveResponseBuyKeeperTrapperMode(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class DirectiveResponseCancelKeeperTrapperMode(State):
+class DirectiveResponseBuyKeeperTrapper(State):
+    def next(self, input_action, session, handler_input):
+        card_title = "Buying Keeper Trapper"
+
+        if input_action == "ACCEPTED":
+            if session.get_stored_game_state() == "EndingStateAquarium":
+                return KeeperTrapperExecutiveWashroom().next(input_action, session, handler_input)
+            else:
+                speech_output = wrap_with_speak("In order to play level three, Keeper Trapper LLC, "
+                                                "you will have to reach it. So, what should Pug do next?")
+        elif input_action == "ALREADY_PURCHASED":
+            speech_output = wrap_with_speak("You've already purchased Keeper Trapper. What should Pug do next?")
+        elif input_action == "DECLINED":
+            speech_output = wrap_with_speak("Welcome back. What should Pug do next?")
+        else:
+            speech_output = wrap_with_speak("What should Pug do next?")
+
+        reprompt_text = wrap_with_speak("What should Pug do next?")
+        should_end_session = False
+        return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
+
+
+class DirectiveResponseCancelKeeperTrapper(State):
     def next(self, input_action, session, handler_input):
         card_title = "Refund Keeper Trapper"
 

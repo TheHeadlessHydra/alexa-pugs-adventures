@@ -22,8 +22,10 @@ def decorate_and_validate_session_is_purchased(handler_input, session):
     session.set_is_keeper_trapper_purchased(keeper_trapper_purchased)
     session.set_is_keeper_trapper_purchasable(keeper_trapper_purchasable)
 
-    if session.get_stored_game_state().startswith("KeeperTrapper"):
-        session.set_stored_game_state("EndingState")
+    if not session.get_is_keeper_trapper_purchased() and session.get_stored_game_state().startswith("KeeperTrapper"):
+        return True
+    else:
+        return False
 
 
 def get_product_list(handler_input):

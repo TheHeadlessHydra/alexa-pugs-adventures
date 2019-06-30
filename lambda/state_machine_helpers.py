@@ -283,6 +283,7 @@ def build_response(session_attributes, speechlet_response):
 
 
 def add_upsell_to_output(output_json, upsell_product_id, upsell_message):
+    output_json['response']['shouldEndSession'] = True
     output_json['response']['directives'] = [
         {
             "type": "Connections.SendRequest",

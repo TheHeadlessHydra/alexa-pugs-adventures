@@ -2,12 +2,6 @@
 
 This is a game revolving around a goblin that no longer wishes to serve in a dungeon.
 
-
-## Testing the flow
-- Buy before reaching end, then reach end and see if you flow into keeper trapper normally
-- Buy AT ending flow, see if it transitions properly
-- Be at keeper trapper, refund, see if it kicks you out
-
 ## TODO
  - upgrade to python 3.7
  - exit vs stop doing different things
