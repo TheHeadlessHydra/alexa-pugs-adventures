@@ -16,7 +16,7 @@ class ISPWhatCanBePurchased(State):
             speech_output = wrap_with_speak("Nothing can be purchased at the moment. "
                                             "Going back to Pug, what should he do next?")
 
-        reprompt_text = "What should Pug do next?"
+        reprompt_text = wrap_with_speak("What should Pug do next?")
         should_end_session = False
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
@@ -32,7 +32,7 @@ class ISPWhatsBeenPurchased(State):
             speech_output = wrap_with_speak("You have not purchased anything. "
                                             "Going back to Pug, what should he do next?")
 
-        reprompt_text = "What should Pug do next?"
+        reprompt_text = wrap_with_speak("What should Pug do next?")
         should_end_session = False
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
@@ -43,7 +43,7 @@ class ISPMoreAboutKeeperTrapper(State):
         speech_output = wrap_with_speak("Level 3: Keeper Trapper LLC is a much more complicated level, full of "
                                         "puzzles, traps, and odd characters. Pug clearly can't handle it."
                                         " Going back to Pug, what should he do next?")
-        reprompt_text = "What should Pug do next?"
+        reprompt_text = wrap_with_speak("What should Pug do next?")
         should_end_session = False
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
@@ -53,7 +53,7 @@ class ISPWhatsFreeVsPaid(State):
         card_title = "What's free and what's not"
         speech_output = wrap_with_speak("Level 1 and level 2 of the game is free, and level 3: Keeper Trapper "
                                         "is premium content. Going back to Pug, what should he do next?")
-        reprompt_text = "What should Pug do next?"
+        reprompt_text = wrap_with_speak("What should Pug do next?")
         should_end_session = True
         session.set_stored_game_state(None)
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
@@ -74,7 +74,7 @@ class ISPBuyKeeperTrapper(State):
             speech_output = wrap_with_speak(
                 "I am sorry. That product is not available for purchase. What should Pug do next?"
             )
-            reprompt_text = "What should Pug do next?"
+            reprompt_text = wrap_with_speak("What should Pug do next?")
             should_end_session = False
             return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
@@ -95,17 +95,21 @@ class ISPReturnKeeperTrapper(State):
                 "You have not purchased Level 3: Keeper Trapper. It does not need to be returned."
                 " What should Pug do next?"
             )
-            reprompt_text = "What should Pug do next?"
+            reprompt_text = wrap_with_speak("What should Pug do next?")
             should_end_session = False
             return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class DirectiveResponseBuyKeeperTrapper(State):
+class DirectiveResponseBuyKeeperTrapperMode(State):
     def next(self, input_action, session, handler_input):
         card_title = "Buying Keeper Trapper"
 
         if input_action == "ACCEPTED":
-            return KeeperTrapperExecutiveWashroom().next(input_action, session, handler_input)
+            if session.get_stored_game_state() == "EndingState":
+                return KeeperTrapperExecutiveWashroom().next(input_action, session, handler_input)
+            else:
+                speech_output = wrap_with_speak("In order to play level three, Keeper Trapper LLC, "
+                                                "you will have to reach it. So, what should Pug do next?")
         elif input_action == "ALREADY_PURCHASED":
             speech_output = wrap_with_speak("You've already purchased Keeper Trapper. What should Pug do next?")
         elif input_action == "DECLINED":
@@ -113,12 +117,12 @@ class DirectiveResponseBuyKeeperTrapper(State):
         else:
             speech_output = wrap_with_speak("What should Pug do next?")
 
-        reprompt_text = "What should Pug do next?"
+        reprompt_text = wrap_with_speak("What should Pug do next?")
         should_end_session = False
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class DirectiveResponseCancelKeeperTrapper(State):
+class DirectiveResponseCancelKeeperTrapperMode(State):
     def next(self, input_action, session, handler_input):
         card_title = "Refund Keeper Trapper"
 
@@ -129,6 +133,6 @@ class DirectiveResponseCancelKeeperTrapper(State):
         else:
             speech_output = wrap_with_speak("Welcome back. What should Pug do next?")
 
-        reprompt_text = "What should Pug do next?"
+        reprompt_text = wrap_with_speak("What should Pug do next?")
         should_end_session = False
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)

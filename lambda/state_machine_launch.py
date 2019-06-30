@@ -7,6 +7,7 @@ This file also holds are initializer helper methods used to start the state mach
 
 from game import *
 from state import *
+from state_machine_isp import *
 from state_machine_goblin_town import *
 from cannot_build_state_machine_exception import *
 import sys

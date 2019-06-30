@@ -12,7 +12,7 @@ logger = logging.getLogger()
 
 class KeeperTrapperExecutiveWashroom(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperExecutiveWashroom, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperExecutiveWashroom, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -86,7 +86,7 @@ class KeeperTrapperExecutiveWashroom(State):
         elif input_action == COMMON_GO_LEFT or input_action == COMMON_EXIT_THE_ROOM \
                 or input_action == KEEPER_TRAPPER_GO_TO_RECEPTION or input_action == COMMON_OPEN_THE_DOOR \
                 or input_action == KEEPER_TRAPPER_WASHROOM_LEAVE_WASHROOM:
-            return KeeperTrapperReception().next(RETURN, session)
+            return KeeperTrapperReception().next(RETURN, session, handler_input)
         elif input_action == KEEPER_TRAPPER_WASHROOM_INSPECT_PLUMBER \
                 and session.get_event_inventory().exists(Events.keeper_trapper_plumber_in_washroom):
             speech_output = wrap_with_speak(
@@ -171,7 +171,7 @@ class KeeperTrapperExecutiveWashroom(State):
 
 class KeeperTrapperReception(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperReception, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperReception, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -263,11 +263,11 @@ class KeeperTrapperReception(State):
                                     "left behind. <break time=\"1s\"/>It's probably not a good idea to "
                                     "return to the scene of the crime. What should Pug do next?")
             else:
-                return KeeperTrapperExecutiveWashroom().next(RETURN, session)
+                return KeeperTrapperExecutiveWashroom().next(RETURN, session, handler_input)
         elif input_action == KEEPER_TRAPPER_GO_TO_RNDND:
-            return KeeperTrapperRNDND().next(RETURN, session)
+            return KeeperTrapperRNDND().next(RETURN, session, handler_input)
         elif input_action == KEEPER_TRAPPER_GO_TO_BOARDROOM:
-            return KeeperTrapperBoardRoom().next(RETURN, session)
+            return KeeperTrapperBoardRoom().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in reception. " + tldr_whats_in_area)
 
@@ -277,7 +277,7 @@ class KeeperTrapperReception(State):
 
 class KeeperTrapperBoardRoom(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperBoardRoom, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperBoardRoom, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -368,13 +368,13 @@ class KeeperTrapperBoardRoom(State):
         elif input_action == KEEPER_TRAPPER_GO_THROUGH_GOLDEN_DOOR:
             if session.get_item_inventory().exists(World.keeper_trapper_golden_door_key):
                 session.get_item_inventory().mark_item_as_used(World.keeper_trapper_golden_door_key)
-                return KeeperTrapperCEOsRoom().next(input_action, session)
+                return KeeperTrapperCEOsRoom().next(input_action, session, handler_input)
             else:
                 speech_output = wrap_with_speak("Pug attempts to open the golden door. However it seems that the "
                                                 "door is locked. Pug would need a key to get through this door. "
                                                 "What should Pug do next?")
         elif input_action == COMMON_GO_BACK or input_action == KEEPER_TRAPPER_GO_TO_RECEPTION:
-            return KeeperTrapperReception().next(RETURN, session)
+            return KeeperTrapperReception().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the board room. " + tldr_whats_in_area)
 
@@ -384,7 +384,7 @@ class KeeperTrapperBoardRoom(State):
 
 class KeeperTrapperCEOsRoom(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperCEOsRoom, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperCEOsRoom, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -486,7 +486,7 @@ class KeeperTrapperCEOsRoom(State):
                                                 "refuses to enter the room. What should Pug do next?")
             elif session.get_event_inventory().exists(Events.keeper_trapper_silver_door_open) \
                     and session.get_event_inventory().exists(Events.keeper_trapper_trap_broken):
-                return KeeperTrapperElevator().next(RETURN, session)
+                return KeeperTrapperElevator().next(RETURN, session, handler_input)
             else:
                 speech_output = wrap_with_speak("Pug looks up at two monolithic silver doors with no handles "
                                                 "and scratches his head. What should Pug do next?")
@@ -610,7 +610,7 @@ class KeeperTrapperCEOsRoom(State):
                                             "What should Pug do next?")
             session.get_item_inventory().add(World.keeper_trapper_letter_opener)
         elif input_action == COMMON_GO_BACK or input_action == KEEPER_TRAPPER_GO_TO_BOARDROOM:
-            return KeeperTrapperBoardRoom().next(RETURN, session)
+            return KeeperTrapperBoardRoom().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the extravagant office. " + tldr_whats_in_area)
 
@@ -620,7 +620,7 @@ class KeeperTrapperCEOsRoom(State):
 
 class KeeperTrapperElevator(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperElevator, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperElevator, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -641,9 +641,9 @@ class KeeperTrapperElevator(State):
             speech_output = wrap_with_speak("Pug is back in the elevator with the irritating music. "
                                             + tldr_whats_in_area)
         elif input_action == COMMON_PRESS_BUTTON or input_action == KEEPER_TRAPPER_ELEVATOR_PRESS_BUTTON:
-            return EndingState().next(RETURN, session)
+            return EndingState().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_BACK or input_action == KEEPER_TRAPPER_ELEVATOR_LEAVE:
-            return KeeperTrapperCEOsRoom().next(RETURN, session)
+            return KeeperTrapperCEOsRoom().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the elevator. " + tldr_whats_in_area)
 
@@ -654,7 +654,7 @@ class KeeperTrapperElevator(State):
 # TODO add hints inbetween sections by asking again, etc.
 class KeeperTrapperRNDND(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperRNDND, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperRNDND, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -680,9 +680,9 @@ class KeeperTrapperRNDND(State):
         elif input_action == RETURN:
             speech_output = wrap_with_speak("Pug is back in RnDnD. " + tldr_whats_in_area)
         elif input_action == COMMON_GO_RIGHT or input_action == KEEPER_TRAPPER_GO_TO_NET_ROOM:
-            return KeeperTrapperNetRoom().next(RETURN, session)
+            return KeeperTrapperNetRoom().next(RETURN, session, handler_input)
         elif input_action == KEEPER_TRAPPER_RNDND_INSPECT_WORKSTATION:
-            return KeeperTrapperWorkstation().next(RETURN, session)
+            return KeeperTrapperWorkstation().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_LEFT \
                 or input_action == KEEPER_TRAPPER_RNDND_TRAP_BEAR \
                 or input_action == COMMON_OPEN_THE_DOOR:
@@ -774,7 +774,7 @@ class KeeperTrapperRNDND(State):
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak(detailed_description)
         elif input_action == COMMON_GO_BACK or input_action == KEEPER_TRAPPER_GO_TO_RECEPTION:
-            return KeeperTrapperReception().next(RETURN, session)
+            return KeeperTrapperReception().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in RnDnD. " + tldr_whats_in_area)
 
@@ -784,7 +784,7 @@ class KeeperTrapperRNDND(State):
 
 class KeeperTrapperWorkstation(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperWorkstation, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperWorkstation, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -853,7 +853,7 @@ class KeeperTrapperWorkstation(State):
                                             "bolts bemusedly knowing it's not going to happen. He could try to"
                                             "memorize it, Pug guesses... What should Pug do next?")
         elif input_action == COMMON_GO_BACK:
-            return KeeperTrapperRNDND().next(RETURN, session)
+            return KeeperTrapperRNDND().next(RETURN, session, handler_input)
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak(detailed_description)
         else:
@@ -865,7 +865,7 @@ class KeeperTrapperWorkstation(State):
 
 class KeeperTrapperNetRoom(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(KeeperTrapperNetRoom, self).next(input_action, session)
+        overriding_action = super(KeeperTrapperNetRoom, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -982,7 +982,7 @@ class KeeperTrapperNetRoom(State):
                 session.get_item_inventory().add(World.keeper_trapper_golden_door_key)
             session.get_event_inventory().add(Events.keeper_trapper_free_elf)
         elif input_action == COMMON_GO_BACK or input_action == KEEPER_TRAPPER_GO_TO_RNDND:
-            return KeeperTrapperRNDND().next(RETURN, session)
+            return KeeperTrapperRNDND().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the Net Room. " + tldr_whats_in_area)
 
