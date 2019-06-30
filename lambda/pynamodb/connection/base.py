@@ -10,6 +10,7 @@ import time
 import uuid
 import warnings
 from base64 import b64decode
+from threading import local
 
 import six
 from botocore.client import ClientError
@@ -32,13 +33,14 @@ from pynamodb.constants import (
     PUT_ITEM, SELECT, ACTION, EXISTS, VALUE, LIMIT, QUERY, SCAN, ITEM, LOCAL_SECONDARY_INDEXES,
     KEYS, KEY, EQ, SEGMENT, TOTAL_SEGMENTS, CREATE_TABLE, PROVISIONED_THROUGHPUT, READ_CAPACITY_UNITS,
     WRITE_CAPACITY_UNITS, GLOBAL_SECONDARY_INDEXES, PROJECTION, EXCLUSIVE_START_TABLE_NAME, TOTAL,
-    DELETE_TABLE, UPDATE_TABLE, LIST_TABLES, GLOBAL_SECONDARY_INDEX_UPDATES,
+    DELETE_TABLE, UPDATE_TABLE, LIST_TABLES, GLOBAL_SECONDARY_INDEX_UPDATES, ATTRIBUTES,
     CONSUMED_CAPACITY, CAPACITY_UNITS, QUERY_FILTER, QUERY_FILTER_VALUES, CONDITIONAL_OPERATOR,
     CONDITIONAL_OPERATORS, NULL, NOT_NULL, SHORT_ATTR_TYPES, DELETE, PUT,
     ITEMS, DEFAULT_ENCODING, BINARY_SHORT, BINARY_SET_SHORT, LAST_EVALUATED_KEY, RESPONSES, UNPROCESSED_KEYS,
     UNPROCESSED_ITEMS, STREAM_SPECIFICATION, STREAM_VIEW_TYPE, STREAM_ENABLED, UPDATE_EXPRESSION,
     EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, KEY_CONDITION_OPERATOR_MAP,
-    CONDITION_EXPRESSION, FILTER_EXPRESSION, FILTER_EXPRESSION_OPERATOR_MAP, NOT_CONTAINS, AND)
+    CONDITION_EXPRESSION, FILTER_EXPRESSION, FILTER_EXPRESSION_OPERATOR_MAP, NOT_CONTAINS, AND,
+    TIME_TO_LIVE_SPECIFICATION, ENABLED, UPDATE_TIME_TO_LIVE)
 from pynamodb.exceptions import (
     TableError, QueryError, PutError, DeleteError, UpdateError, GetError, ScanError, TableDoesNotExist,
     VerboseClientError
@@ -93,6 +95,22 @@ class MetaTable(object):
                     self._hash_keyname = attr.get(ATTR_NAME)
                     break
         return self._hash_keyname
+
+    def get_key_names(self, index_name=None):
+        """
+        Returns the names of the primary key attributes and index key attributes (if index_name is specified)
+        """
+        key_names = [self.hash_keyname]
+        if self.range_keyname:
+            key_names.append(self.range_keyname)
+        if index_name is not None:
+            index_hash_keyname = self.get_index_hash_keyname(index_name)
+            if index_hash_keyname not in key_names:
+                key_names.append(index_hash_keyname)
+            index_range_keyname = self.get_index_range_keyname(index_name)
+            if index_range_keyname is not None and index_range_keyname not in key_names:
+                key_names.append(index_range_keyname)
+        return key_names
 
     def get_index_hash_keyname(self, index_name):
         """
@@ -209,7 +227,7 @@ class Connection(object):
                  request_timeout_seconds=None, max_retry_attempts=None, base_backoff_ms=None):
         self._tables = {}
         self.host = host
-        self._session = None
+        self._local = local()
         self._requests_session = None
         self._client = None
         if region:
@@ -284,7 +302,7 @@ class Connection(object):
 
         Raises TableDoesNotExist if the specified table does not exist
         """
-        if operation_name not in [DESCRIBE_TABLE, LIST_TABLES, UPDATE_TABLE, DELETE_TABLE, CREATE_TABLE]:
+        if operation_name not in [DESCRIBE_TABLE, LIST_TABLES, UPDATE_TABLE, UPDATE_TIME_TO_LIVE, DELETE_TABLE, CREATE_TABLE]:
             if RETURN_CONSUMED_CAPACITY not in operation_kwargs:
                 operation_kwargs.update(self.get_consumed_capacity_map(TOTAL))
         self._log_debug(operation_name, operation_kwargs)
@@ -332,16 +350,24 @@ class Connection(object):
             attempt_number = i + 1
             is_last_attempt_for_exceptions = i == self._max_retry_attempts_exception
 
+            response = None
             try:
+                proxies = getattr(self.client._endpoint, "proxies", None)
+                # After the version 1.11.0 of botocore this field is no longer available here
+                if proxies is None:
+                    proxies = self.client._endpoint.http_session._proxy_config._proxies
+
                 response = self.requests_session.send(
                     prepared_request,
                     timeout=self._request_timeout_seconds,
-                    proxies=self.client._endpoint.proxies,
+                    proxies=proxies,
                 )
                 data = response.json()
             except (requests.RequestException, ValueError) as e:
                 if is_last_attempt_for_exceptions:
                     log.debug('Reached the maximum number of retry attempts: %s', attempt_number)
+                    if response:
+                        e.args += (str(response.content),)
                     raise
                 else:
                     # No backoff for fast-fail exceptions that likely failed at the frontend
@@ -419,8 +445,8 @@ class Connection(object):
             for attr in six.itervalues(data[LAST_EVALUATED_KEY]):
                 _convert_binary(attr)
         if UNPROCESSED_KEYS in data:
-            for item_list in six.itervalues(data[UNPROCESSED_KEYS]):
-                for item in item_list:
+            for table_data in six.itervalues(data[UNPROCESSED_KEYS]):
+                for item in table_data[KEYS]:
                     for attr in six.itervalues(item):
                         _convert_binary(attr)
         if UNPROCESSED_ITEMS in data:
@@ -430,6 +456,9 @@ class Connection(object):
                         for item in six.itervalues(item_mapping):
                             for attr in six.itervalues(item):
                                 _convert_binary(attr)
+        if ATTRIBUTES in data:
+            for attr in six.itervalues(data[ATTRIBUTES]):
+                _convert_binary(attr)
         return data
 
     @property
@@ -437,9 +466,10 @@ class Connection(object):
         """
         Returns a valid botocore session
         """
-        if self._session is None:
-            self._session = get_session()
-        return self._session
+        # botocore client creation is not thread safe as of v1.2.5+ (see issue #153)
+        if getattr(self._local, 'session', None) is None:
+            self._local.session = get_session()
+        return self._local.session
 
     @property
     def requests_session(self):
@@ -554,6 +584,22 @@ class Connection(object):
         except BOTOCORE_EXCEPTIONS as e:
             raise TableError("Failed to create table: {0}".format(e), e)
         return data
+
+    def update_time_to_live(self, table_name, ttl_attribute_name):
+        """
+        Performs the UpdateTimeToLive operation
+        """
+        operation_kwargs = {
+            TABLE_NAME: table_name,
+            TIME_TO_LIVE_SPECIFICATION: {
+                ATTR_NAME: ttl_attribute_name,
+                ENABLED: True,
+            }
+        }
+        try:
+            return self.dispatch(UPDATE_TIME_TO_LIVE, operation_kwargs)
+        except BOTOCORE_EXCEPTIONS as e:
+            raise TableError("Failed to update TTL on table: {0}".format(e), e)
 
     def delete_table(self, table_name):
         """
@@ -1076,7 +1122,8 @@ class Connection(object):
                           allow_rate_limited_scan_without_consumed_capacity=None,
                           max_sleep_between_retry=10,
                           max_consecutive_exceptions=10,
-                          consistent_read=None):
+                          consistent_read=None,
+                          index_name=None):
         """
         Performs a rate limited scan on the table. The API uses the scan API to fetch items from
         DynamoDB. The rate_limited_scan uses the 'ConsumedCapacity' value returned from DynamoDB to
@@ -1103,6 +1150,7 @@ class Connection(object):
         :param max_consecutive_exceptions: Max number of consecutive ProvisionedThroughputExceededException
             exception for scan to exit
         :param consistent_read: enable consistent read
+        :param index_name: an index to perform the scan on
         """
         read_capacity_to_consume_per_ms = float(read_capacity_to_consume_per_second) / 1000
         if allow_rate_limited_scan_without_consumed_capacity is None:
@@ -1136,7 +1184,8 @@ class Connection(object):
                         scan_filter=scan_filter,
                         segment=segment,
                         total_segments=total_segments,
-                        consistent_read=consistent_read
+                        consistent_read=consistent_read,
+                        index_name=index_name
                     )
                     for item in data.get(ITEMS):
                         yield item
@@ -1152,10 +1201,12 @@ class Connection(object):
                         if allow_rate_limited_scan_without_consumed_capacity:
                             latest_scan_consumed_capacity = 0
                         else:
-                            raise ScanError('Rate limited scan not possible because the server did not send back'
-                                            'consumed capacity information. If you wish scans to complete anyway'
-                                            'without functioning rate limiting, set '
-                                            'allow_rate_limited_scan_without_consumed_capacity to True in settings.')
+                            raise ScanError(
+                                'Rate limited scan not possible because the server did not report '
+                                'consumed capacity. To continue scanning without rate limiting '
+                                '(such as when using DynamoDB Local, which does not report consumed capacity), '
+                                'set allow_rate_limited_scan_without_consumed_capacity to True in settings.'
+                            )
 
                     last_evaluated_key = data.get(LAST_EVALUATED_KEY, None)
                     consecutive_provision_throughput_exceeded_ex = 0
@@ -1220,7 +1271,8 @@ class Connection(object):
              exclusive_start_key=None,
              segment=None,
              total_segments=None,
-             consistent_read=None):
+             consistent_read=None,
+             index_name=None):
         """
         Performs the scan operation
         """
@@ -1236,6 +1288,8 @@ class Connection(object):
         if attributes_to_get is not None:
             projection_expression = create_projection_expression(attributes_to_get, name_placeholders)
             operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
+        if index_name:
+            operation_kwargs[INDEX_NAME] = index_name
         if limit is not None:
             operation_kwargs[LIMIT] = limit
         if return_consumed_capacity:

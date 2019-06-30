@@ -12,7 +12,7 @@ logger = logging.getLogger()
 # TODO: teach about describing inventory and option menu
 class GoblinTownPugsHome(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(GoblinTownPugsHome, self).next(input_action, session)
+        overriding_action = super(GoblinTownPugsHome, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -92,7 +92,7 @@ class GoblinTownPugsHome(State):
               or input_action == GOBLIN_TOWN_GO_BACK_TO_TOWN
               or input_action == COMMON_OPEN_THE_DOOR) \
                 and session.get_item_inventory().exists(World.goblin_town_various_boots):
-            return GoblinTownCenter().next(RETURN, session)
+            return GoblinTownCenter().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in his home. " + tldr_whats_in_area)
 
@@ -102,7 +102,7 @@ class GoblinTownPugsHome(State):
 
 class GoblinTownCenter(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(GoblinTownCenter, self).next(input_action, session)
+        overriding_action = super(GoblinTownCenter, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -128,14 +128,14 @@ class GoblinTownCenter(State):
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak("Pug is in the " + Config.goblin_town_name + " town Center. " + detailed_description)
         elif input_action == COMMON_GO_NORTH or input_action == GOBLIN_TOWN_GO_TO_MINES:
-            return GoblinTownMines().next(RETURN, session)
+            return GoblinTownMines().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_EAST or input_action == COMMON_GO_BACK \
                 or input_action == GOBLIN_TOWN_GO_TO_PUGS_HOME:
-            return GoblinTownPugsHome().next(RETURN, session)
+            return GoblinTownPugsHome().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_SOUTH or input_action == GOBLIN_TOWN_GO_TO_CHOW_HALL:
-            return GoblinTownChowHall().next(RETURN, session)
+            return GoblinTownChowHall().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_WEST or input_action == GOBLIN_TOWN_GO_TO_TRADING_POST:
-            return GoblinTownTradingPost().next(RETURN, session)
+            return GoblinTownTradingPost().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the " + Config.goblin_town_name + " Town Center. " + tldr_whats_in_area)
 
@@ -144,7 +144,7 @@ class GoblinTownCenter(State):
 
 class GoblinTownMines(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(GoblinTownMines, self).next(input_action, session)
+        overriding_action = super(GoblinTownMines, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -212,10 +212,10 @@ class GoblinTownMines(State):
             session.get_item_inventory().mark_item_as_used(World.goblin_town_pickaxe)
             session.get_event_inventory().add(Events.goblin_town_break_rocks)
         elif input_action == GOBLIN_TOWN_MINES_GO_THROUGH_HOLE:
-            return PiranhaParadiseVisitorCenter().next(RETURN, session)
+            return PiranhaParadiseVisitorCenter().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_BACK or input_action == GOBLIN_TOWN_GO_BACK_TO_TOWN \
                 or input_action == COMMON_GO_SOUTH:
-            return GoblinTownCenter().next(RETURN, session)
+            return GoblinTownCenter().next(RETURN, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the Goblin Rubble and Rock Mines. " + tldr_whats_in_area)
 
@@ -224,7 +224,7 @@ class GoblinTownMines(State):
 
 class GoblinTownTradingPost(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(GoblinTownTradingPost, self).next(input_action, session)
+        overriding_action = super(GoblinTownTradingPost, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -278,7 +278,7 @@ class GoblinTownTradingPost(State):
             speech_output = wrap_with_speak(detailed_description)
         elif input_action == GOBLIN_TOWN_GO_BACK_TO_TOWN or input_action == COMMON_GO_BACK \
                 or input_action == COMMON_GO_WEST:
-            return GoblinTownCenter().next(RETURN, session)
+            return GoblinTownCenter().next(RETURN, session, handler_input)
         elif input_action == GOBLIN_TOWN_TRADER_INSPECT_PICKAXE:
             speech_output = wrap_with_speak(
                 "A jagged neon pink pickaxe lays on the shelf. Aside from its awful coloring, it seems to be a perfectly "
@@ -309,7 +309,7 @@ class GoblinTownTradingPost(State):
                 "<break time=\"1s\"/><prosody pitch=\"high\" volume=\"loud\">AAHHH, BOOTS!!!</prosody> "
                 "<break time=\"1s\"/>She takes a big whiff of them. "
                 "<break time=\"1s\"/><prosody pitch=\"high\" volume=\"loud\">Oooo, fresh ones too! "
-                "I'll give you 15 gold a boot for these. So that's uh...<break time=\"1s\"/> 61 gold</prosody>"
+                "I'll give you 15 gold a boot for these. So that's uh...<break time=\"1s\"/> 61 gold. </prosody>"
                 "<break time=\"1s\"/>Pug doesn't think that's quite the right price, but lacks the wits to know "
                 "for sure, nor the nerve to demand for more. Pug has received 61 gold. "
                 "What should Pug do next?")
@@ -375,7 +375,7 @@ class GoblinTownTradingPost(State):
 
 class GoblinTownChowHall(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(GoblinTownChowHall, self).next(input_action, session)
+        overriding_action = super(GoblinTownChowHall, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -403,7 +403,7 @@ class GoblinTownChowHall(State):
         elif input_action == GOBLIN_TOWN_GO_BACK_TO_TOWN or input_action == COMMON_GO_BACK \
                 or input_action == GOBLIN_TOWN_CHOW_HALL_LEAVE or input_action == COMMON_EXIT_THE_ROOM \
                 or input_action == COMMON_GO_NORTH:
-            return GoblinTownCenter().next(RETURN, session)
+            return GoblinTownCenter().next(RETURN, session, handler_input)
         elif input_action == GOBLIN_TOWN_CHOW_HALL_TALK_TO_GRUGG:
             if not session.get_event_inventory().exists(Events.goblin_town_talked_to_grugg):
                 speech_output = wrap_with_speak(

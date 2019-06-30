@@ -7,7 +7,7 @@ everything that is changed is backwards compatible. If you need to make a non-ba
 session_state_builder has a method for handling non-backwards-compatible changes called session_state_schema_converter.
 
 """
-from sets import Set
+
 
 class Events(object):
     # --------------------------- Common ------------------------------#
@@ -66,12 +66,13 @@ class Events(object):
     keeper_trapper_free_elf = 30
     keeper_trapper_open_envelope = 31
 
+
 class EventInventory(object):
     """
     A class that holds the players inventory
     """
     def __init__(self):
-        self.inventory = Set()
+        self.inventory = set()
 
     def add(self, event_id):
         self.inventory.add(event_id)

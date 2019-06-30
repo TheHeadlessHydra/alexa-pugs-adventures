@@ -1,26 +1,26 @@
-# -*- coding: utf-8 -*-
-#
 # Copyright (C) 2008 John Paulett (john -at- paulett.org)
-# Copyright (C) 2009, 2011, 2013 David Aguilar (davvid -at- gmail.com) and contributors
+# Copyright (C) 2009-2018 David Aguilar (davvid -at- gmail.com)
 # All rights reserved.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution.
 from __future__ import absolute_import, division, unicode_literals
-import base64
+import decimal
 import warnings
 import sys
+import types
 from itertools import chain, islice
 
+from . import compat
 from . import util
 from . import tags
 from . import handlers
-from .backend import JSONBackend
-from .compat import numeric_types, unicode, PY3, PY2
+from .backend import json
+from .compat import numeric_types, string_types, PY3, PY2
 
 
 def encode(value,
-           unpicklable=False,
+           unpicklable=True,
            make_refs=True,
            keys=False,
            max_depth=None,
@@ -29,25 +29,71 @@ def encode(value,
            warn=False,
            context=None,
            max_iter=None,
-           numeric_keys=False):
-    backend = _make_backend(backend)
-    if context is None:
-        context = Pickler(unpicklable=unpicklable,
-                          make_refs=make_refs,
-                          keys=keys,
-                          backend=backend,
-                          max_depth=max_depth,
-                          warn=warn,
-                          max_iter=max_iter,
-                          numeric_keys=numeric_keys)
+           use_decimal=False,
+           numeric_keys=False,
+           use_base85=False):
+    """Return a JSON formatted representation of value, a Python object.
+
+    :param unpicklable: If set to False then the output will not contain the
+        information necessary to turn the JSON data back into Python objects,
+        but a simpler JSON stream is produced.
+    :param max_depth: If set to a non-negative integer then jsonpickle will
+        not recurse deeper than 'max_depth' steps into the object.  Anything
+        deeper than 'max_depth' is represented using a Python repr() of the
+        object.
+    :param make_refs: If set to False jsonpickle's referencing support is
+        disabled.  Objects that are id()-identical won't be preserved across
+        encode()/decode(), but the resulting JSON stream will be conceptually
+        simpler.  jsonpickle detects cyclical objects and will break the cycle
+        by calling repr() instead of recursing when make_refs is set False.
+    :param keys: If set to True then jsonpickle will encode non-string
+        dictionary keys instead of coercing them into strings via `repr()`.
+    :param warn: If set to True then jsonpickle will warn when it
+        returns None for an object which it cannot pickle
+        (e.g. file descriptors).
+    :param max_iter: If set to a non-negative integer then jsonpickle will
+        consume at most `max_iter` items when pickling iterators.
+    :param use_decimal: If set to True jsonpickle will allow Decimal
+        instances to pass-through, with the assumption that the simplejson
+        backend will be used in `use_decimal` mode.  In order to use this mode
+        you will need to configure simplejson::
+
+            jsonpickle.set_encoder_options('simplejson',
+                                           use_decimal=True, sort_keys=True)
+            jsonpickle.set_decoder_options('simplejson',
+                                           use_decimal=True)
+            jsonpickle.set_preferred_backend('simplejson')
+
+        NOTE: A side-effect of the above settings is that float values will be
+        converted to Decimal when converting to json.
+
+    >>> encode('my string') == '"my string"'
+    True
+    >>> encode(36) == '36'
+    True
+    >>> encode({'foo': True}) == '{"foo": true}'
+    True
+    >>> encode({'foo': [1, 2, [3, 4]]}, max_depth=1)
+    '{"foo": "[1, 2, [3, 4]]"}'
+
+    :param use_base85:
+        If possible, use base85 to encode binary data. Base85 bloats binary data
+        by 1/4 as opposed to base64, which expands it by 1/3. This argument is
+        ignored on Python 2 because it doesn't support it.
+    """
+    backend = backend or json
+    context = context or Pickler(
+            unpicklable=unpicklable,
+            make_refs=make_refs,
+            keys=keys,
+            backend=backend,
+            max_depth=max_depth,
+            warn=warn,
+            max_iter=max_iter,
+            numeric_keys=numeric_keys,
+            use_decimal=use_decimal,
+            use_base85=use_base85)
     return backend.encode(context.flatten(value, reset=reset))
-
-
-def _make_backend(backend):
-    if backend is None:
-        return JSONBackend()
-    else:
-        return backend
 
 
 class Pickler(object):
@@ -60,13 +106,16 @@ class Pickler(object):
                  keys=False,
                  warn=False,
                  max_iter=None,
-                 numeric_keys=False):
+                 numeric_keys=False,
+                 use_decimal=False,
+                 use_base85=False):
         self.unpicklable = unpicklable
         self.make_refs = make_refs
-        self.backend = _make_backend(backend)
+        self.backend = backend or json
         self.keys = keys
         self.warn = warn
         self.numeric_keys = numeric_keys
+        self.use_base85 = use_base85 and (not PY2)
         # The current recursion depth
         self._depth = -1
         # The maximal recursion depth
@@ -77,6 +126,15 @@ class Pickler(object):
         self._seen = []
         # maximum amount of items to take from a pickled iterator
         self._max_iter = max_iter
+        # Whether to allow decimals to pass-through
+        self._use_decimal = use_decimal
+
+        if self.use_base85:
+            self._bytes_tag = tags.B85
+            self._bytes_encoder = util.b85encode
+        else:
+            self._bytes_tag = tags.B64
+            self._bytes_encoder = util.b64encode
 
     def reset(self):
         self._objs = {}
@@ -163,7 +221,12 @@ class Pickler(object):
         self._seen.append(obj)
         max_reached = self._depth == self._max_depth
 
-        if max_reached or (not self.make_refs and id(obj) in self._objs):
+        in_cycle = (
+            max_reached or (
+                not self.make_refs
+                and id(obj) in self._objs
+            )) and not util.is_primitive(obj)
+        if in_cycle:
             # break the cycle
             flatten_func = repr
         else:
@@ -180,14 +243,18 @@ class Pickler(object):
 
     def _get_flattener(self, obj):
 
-        if PY2 and isinstance(obj, file):
+        if PY2 and isinstance(obj, types.FileType):
             return self._flatten_file
+
+        if util.is_bytes(obj):
+            return self._flatten_bytestring
 
         if util.is_primitive(obj):
             return lambda obj: obj
 
-        if util.is_bytes(obj):
-            return self._flatten_bytestring
+        # Decimal is a primitive when use_decimal is True
+        if self._use_decimal and isinstance(obj, decimal.Decimal):
+            return lambda obj: obj
 
         list_recurse = self._list_recurse
 
@@ -241,16 +308,16 @@ class Pickler(object):
         """
         Special case file objects
         """
-        assert not PY3 and isinstance(obj, file)
+        assert not PY3 and isinstance(obj, types.FileType)
         return None
 
     def _flatten_bytestring(self, obj):
         if PY2:
             try:
                 return obj.decode('utf-8')
-            except:
+            except UnicodeDecodeError:
                 pass
-        return {tags.B64: base64.encodestring(obj).decode('utf-8')}
+        return {self._bytes_tag: self._bytes_encoder(obj)}
 
     def _flatten_obj_instance(self, obj):
         """Recursively flatten an instance and return a json-friendly dict
@@ -306,7 +373,7 @@ class Pickler(object):
                     # we ignore those
                     pass
 
-            if reduce_val and isinstance(reduce_val, (str, unicode)):
+            if reduce_val and isinstance(reduce_val, string_types):
                 try:
                     varpath = iter(reduce_val.split('.'))
                     # curmod will be transformed by the
@@ -335,8 +402,8 @@ class Pickler(object):
 
                 # check that getstate/setstate is sane
                 if not (state and hasattr(obj, '__getstate__')
-                            and not hasattr(obj, '__setstate__')
-                            and not isinstance(obj, dict)):
+                        and not hasattr(obj, '__setstate__')
+                        and not isinstance(obj, dict)):
                     # turn iterators to iterables for convenient serialization
                     if rv_as_list[3]:
                         rv_as_list[3] = tuple(rv_as_list[3])
@@ -344,13 +411,16 @@ class Pickler(object):
                     if rv_as_list[4]:
                         rv_as_list[4] = tuple(rv_as_list[4])
 
-                    data[tags.REDUCE] = list(map(self._flatten, rv_as_list))
+                    reduce_args = list(map(self._flatten, rv_as_list))
+                    last_index = len(reduce_args) - 1
+                    while last_index >= 2 and reduce_args[last_index] is None:
+                        last_index -= 1
+                    data[tags.REDUCE] = reduce_args[:last_index+1]
 
                     return data
 
         if has_class and not util.is_module(obj):
             if self.unpicklable:
-                class_name = util.importable_name(cls)
                 data[tags.OBJECT] = class_name
 
             if has_getnewargs_ex:
@@ -376,10 +446,9 @@ class Pickler(object):
 
         if util.is_module(obj):
             if self.unpicklable:
-                data[tags.REPR] = '%s/%s' % (obj.__name__,
-                                             obj.__name__)
+                data[tags.REPR] = '{name}/{name}'.format(name=obj.__name__)
             else:
-                data = unicode(obj)
+                data = compat.ustr(obj)
             return data
 
         if util.is_dictionary_subclass(obj):
@@ -391,7 +460,8 @@ class Pickler(object):
 
         if util.is_iterator(obj):
             # force list in python 3
-            data[tags.ITERATOR] = list(map(self._flatten, islice(obj, self._max_iter)))
+            data[tags.ITERATOR] = list(
+                map(self._flatten, islice(obj, self._max_iter)))
             return data
 
         if has_dict:
@@ -453,7 +523,7 @@ class Pickler(object):
             data['default_factory'] = value
 
         # Sub-classes of dict
-        if hasattr(obj, '__dict__'):
+        if hasattr(obj, '__dict__') and self.unpicklable:
             dict_data = {}
             self._flatten_dict_obj(obj.__dict__, dict_data)
             data['__dict__'] = dict_data
@@ -491,7 +561,7 @@ class Pickler(object):
         if not util.is_picklable(k, v):
             return data
         if self.keys:
-            if not isinstance(k, (str, unicode)) or k.startswith(tags.JSON_KEY):
+            if not isinstance(k, string_types) or k.startswith(tags.JSON_KEY):
                 k = self._escape_key(k)
         else:
             if k is None:
@@ -499,11 +569,11 @@ class Pickler(object):
 
             if self.numeric_keys and isinstance(k, numeric_types):
                 pass
-            elif not isinstance(k, (str, unicode)):
+            elif not isinstance(k, string_types):
                 try:
                     k = repr(k)
-                except:
-                    k = unicode(k)
+                except Exception:
+                    k = compat.ustr(k)
 
         data[k] = self._flatten(v)
         return data
@@ -526,7 +596,7 @@ class Pickler(object):
                                       make_refs=self.make_refs)
 
     def _getstate(self, obj, data):
-        state = self._flatten_obj(obj)
+        state = self._flatten(obj)
         if self.unpicklable:
             data[tags.STATE] = state
         else:
@@ -542,7 +612,7 @@ class Pickler(object):
 def _mktyperef(obj):
     """Return a typeref dictionary
 
-    >>> _mktyperef(AssertionError) == {'py/type': '__builtin__.AssertionError'}
+    >>> _mktyperef(AssertionError) == {'py/type': 'builtins.AssertionError'}
     True
 
     """
@@ -552,6 +622,6 @@ def _mktyperef(obj):
 def _wrap_string_slot(string):
     """Converts __slots__ = 'a' into __slots__ = ('a',)
     """
-    if isinstance(string, (str, unicode)):
+    if isinstance(string, string_types):
         return (string,)
     return string

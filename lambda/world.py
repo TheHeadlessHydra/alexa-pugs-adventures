@@ -10,6 +10,8 @@ session_state_builder has a method for handling non-backwards-compatible changes
 from session import *
 
 # ------------------- Item IDs of the world ------------------
+
+
 class World(object):
     # --------------------------- Aquarium ------------------------------#
     ranger_stiff_fish = 1
@@ -33,7 +35,6 @@ class World(object):
     goblin_town_various_boots = 50
     goblin_town_pickaxe = 51
     goblin_town_freshener = 52
-
 
 
 class Item(object):
@@ -65,6 +66,7 @@ class Item(object):
     def is_item_already_used(self):
         return self.been_used
 
+
 class ItemInventory(object):
     """
     A class that holds the players inventory
@@ -72,7 +74,7 @@ class ItemInventory(object):
     def __init__(self):
         self.inventory = dict()
 
-    def add(self, item_id, been_used = False):
+    def add(self, item_id, been_used=False):
         if item_id in self.inventory:
             return
         new_item = Item(item_id)
@@ -93,11 +95,11 @@ class ItemInventory(object):
         return item_id in self.inventory
 
     def mark_item_as_used(self, item_id):
-        if self.inventory.has_key(item_id):
+        if item_id in self.inventory:
             self.inventory[item_id].mark_as_used()
 
     def is_item_already_used(self, item_id):
-        if self.inventory.has_key(item_id):
+        if item_id in self.inventory:
             return self.inventory[item_id].is_item_already_used()
         else:
             return False
@@ -106,6 +108,7 @@ class ItemInventory(object):
         self.inventory.clear()
 
 # ------------------- Mappings to add decorations to items that are not needed for storage ------------------
+
 
 def get_name_of_item(item_id):
     if item_id == World.ranger_stiff_fish:
@@ -144,6 +147,7 @@ def get_name_of_item(item_id):
         return "Air freshener of Foreshadowing"
     else:
         return "Whoops. We forgot to name this ite: " + str(item_id)
+
 
 def get_description_of_item(item_id):
     if item_id == World.ranger_stiff_fish:

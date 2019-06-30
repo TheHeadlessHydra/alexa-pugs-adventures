@@ -314,6 +314,19 @@ class ConditionExpressionTestCase(TestCase):
         assert placeholder_names == {'foo': '#0'}
         assert expression_attribute_values == {':0': {'S' : 'bar'}}
 
+    def test_map_comparison(self):
+        # Simulate initialization from inside an AttributeContainer
+        my_map_attribute = MapAttribute(attr_name='foo')
+        my_map_attribute._make_attribute()
+        my_map_attribute._update_attribute_paths(my_map_attribute.attr_name)
+
+        condition = my_map_attribute == MapAttribute(bar='baz')
+        placeholder_names, expression_attribute_values = {}, {}
+        expression = condition.serialize(placeholder_names, expression_attribute_values)
+        assert expression == "#0 = :0"
+        assert placeholder_names == {'foo': '#0'}
+        assert expression_attribute_values == {':0': {'M': {'bar': {'S': 'baz'}}}}
+
     def test_list_comparison(self):
         condition = ListAttribute(attr_name='foo') == ['bar', 'baz']
         placeholder_names, expression_attribute_values = {}, {}
@@ -402,6 +415,19 @@ class UpdateExpressionTestCase(TestCase):
         assert placeholder_names == {'foo': '#0'}
         assert expression_attribute_values == {':0': {'S': 'bar'}}
 
+    def test_set_action_attribute_container(self):
+        # Simulate initialization from inside an AttributeContainer
+        my_map_attribute = MapAttribute(attr_name='foo')
+        my_map_attribute._make_attribute()
+        my_map_attribute._update_attribute_paths(my_map_attribute.attr_name)
+
+        action = my_map_attribute.set(MapAttribute(bar='baz'))
+        placeholder_names, expression_attribute_values = {}, {}
+        expression = action.serialize(placeholder_names, expression_attribute_values)
+        assert expression == "#0 = :0"
+        assert placeholder_names == {'foo': '#0'}
+        assert expression_attribute_values == {':0': {'M': {'bar': {'S': 'baz'}}}}
+
     def test_increment_action(self):
         action = self.attribute.set(Path('bar') + 0)
         placeholder_names, expression_attribute_values = {}, {}
@@ -475,6 +501,14 @@ class UpdateExpressionTestCase(TestCase):
         assert expression_attribute_values == {':0': {'N': '0'}}
 
     def test_add_action_set(self):
+        action = NumberSetAttribute(attr_name='foo').add(0, 1)
+        placeholder_names, expression_attribute_values = {}, {}
+        expression = action.serialize(placeholder_names, expression_attribute_values)
+        assert expression == "#0 :0"
+        assert placeholder_names == {'foo': '#0'}
+        assert expression_attribute_values == {':0': {'NS': ['0', '1']}}
+
+    def test_add_action_serialized(self):
         action = NumberSetAttribute(attr_name='foo').add({'NS': ['0']})
         placeholder_names, expression_attribute_values = {}, {}
         expression = action.serialize(placeholder_names, expression_attribute_values)
@@ -487,6 +521,22 @@ class UpdateExpressionTestCase(TestCase):
             Path('foo').add({'L': [{'N': '0'}]})
 
     def test_delete_action(self):
+        action = NumberSetAttribute(attr_name='foo').delete(0, 1)
+        placeholder_names, expression_attribute_values = {}, {}
+        expression = action.serialize(placeholder_names, expression_attribute_values)
+        assert expression == "#0 :0"
+        assert placeholder_names == {'foo': '#0'}
+        assert expression_attribute_values == {':0': {'NS': ['0', '1']}}
+
+    def test_delete_action_set(self):
+        action = NumberSetAttribute(attr_name='foo').delete(set([0, 1]))
+        placeholder_names, expression_attribute_values = {}, {}
+        expression = action.serialize(placeholder_names, expression_attribute_values)
+        assert expression == "#0 :0"
+        assert placeholder_names == {'foo': '#0'}
+        assert expression_attribute_values == {':0': {'NS': ['0', '1']}}
+
+    def test_delete_action_serialized(self):
         action = NumberSetAttribute(attr_name='foo').delete({'NS': ['0']})
         placeholder_names, expression_attribute_values = {}, {}
         expression = action.serialize(placeholder_names, expression_attribute_values)

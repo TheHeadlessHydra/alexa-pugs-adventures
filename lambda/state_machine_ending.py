@@ -10,7 +10,7 @@ from in_skill_purchase import *
 
 class EndingState(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(EndingState, self).next(input_action, session)
+        overriding_action = super(EndingState, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 

@@ -1,0 +1,4 @@
+pynamodb
+ask-sdk
+jsonpickle
+boto3

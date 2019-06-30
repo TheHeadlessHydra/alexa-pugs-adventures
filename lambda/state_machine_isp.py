@@ -5,7 +5,7 @@ from state_machine_common import *
 from in_skill_purchase import *
 
 
-class InitializeWhatCanBePurchased(State):
+class ISPWhatCanBePurchased(State):
     def next(self, input_action, session, handler_input):
         card_title = "What can be bought"
 
@@ -21,7 +21,7 @@ class InitializeWhatCanBePurchased(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class InitializeWhatsBeenPurchased(State):
+class ISPWhatsBeenPurchased(State):
     def next(self, input_action, session, handler_input):
         card_title = "What has been bought"
 
@@ -37,7 +37,7 @@ class InitializeWhatsBeenPurchased(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class InitializeMoreAboutKeeperTrapper(State):
+class ISPMoreAboutKeeperTrapper(State):
     def next(self, input_action, session, handler_input):
         card_title = "More about Keeper Trapper"
         speech_output = wrap_with_speak("Level 3: Keeper Trapper LLC is a much more complicated level, full of "
@@ -48,7 +48,7 @@ class InitializeMoreAboutKeeperTrapper(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class InitializeWhatsFreeVsPaid(State):
+class ISPWhatsFreeVsPaid(State):
     def next(self, input_action, session, handler_input):
         card_title = "What's free and what's not"
         speech_output = wrap_with_speak("Level 1 and level 2 of the game is free, and level 3: Keeper Trapper "
@@ -59,7 +59,7 @@ class InitializeWhatsFreeVsPaid(State):
         return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class InitializeBuyKeeperTrapper(State):
+class ISPBuyKeeperTrapper(State):
     def next(self, input_action, session, handler_input):
         card_title = "Buy Keeper Trapper"
         product_id = get_product_id(handler_input, ProductName.KEEPER_TRAPPER)
@@ -79,7 +79,7 @@ class InitializeBuyKeeperTrapper(State):
             return get_action_response(session, card_title, speech_output, reprompt_text, should_end_session)
 
 
-class InitializeReturnKeeperTrapper(State):
+class ISPReturnKeeperTrapper(State):
     def next(self, input_action, session, handler_input):
         card_title = "Return Keeper Trapper"
         product_id = get_product_id(handler_input, ProductName.TSUNDERE_MODE)

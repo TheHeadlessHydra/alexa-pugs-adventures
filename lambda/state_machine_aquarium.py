@@ -15,7 +15,7 @@ logger = logging.getLogger()
 
 class PiranhaParadiseVisitorCenter(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(PiranhaParadiseVisitorCenter, self).next(input_action, session)
+        overriding_action = super(PiranhaParadiseVisitorCenter, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -101,11 +101,11 @@ class PiranhaParadiseVisitorCenter(State):
                     "offshore into deeper waters and spend the winter in relative inactivity. Other stocks migrate "
                     "across oceans. What should Pug do next?")
         elif input_action == COMMON_GO_LEFT or input_action == VISITOR_CENTER_GOTO_LOST_AND_FOUND:
-            return LostAndFoundCorpses().next(INITIALIZE, session)
+            return LostAndFoundCorpses().next(INITIALIZE, session, handler_input)
         elif input_action == COMMON_GO_RIGHT or input_action == VISITOR_CENTER_GOTO_LOST_PIRANHA_PARADISE:
-            return PiranhaParadiseAquarium().next(INITIALIZE, session)
+            return PiranhaParadiseAquarium().next(INITIALIZE, session, handler_input)
         elif input_action == STOP_INTENT or input_action == CANCEL_INTENT or input_action == SESSION_ENDED:
-            return SessionEndedRequest().next(input_action, session)
+            return SessionEndedRequest().next(input_action, session, handler_input)
         else:
             speech_output = wrap_with_speak(
                 "Pug is in the visitors center for the aquarium. " + tldr_whats_in_area
@@ -119,7 +119,7 @@ class PiranhaParadiseVisitorCenter(State):
 
 class LostAndFoundCorpses(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(LostAndFoundCorpses, self).next(input_action, session)
+        overriding_action = super(LostAndFoundCorpses, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -144,13 +144,13 @@ class LostAndFoundCorpses(State):
         elif input_action == COMMON_GO_BACK or \
                 input_action == COMMON_EXIT_THE_ROOM or \
                 input_action == VISITOR_CENTER_GO_BACK:
-            return PiranhaParadiseVisitorCenter().next(RETURN, session)
+            return PiranhaParadiseVisitorCenter().next(RETURN, session, handler_input)
         elif input_action == LOST_AND_FOUND_INSPECT_RANGER:
-            return RangerCorpse().next(RETURN, session)
+            return RangerCorpse().next(RETURN, session, handler_input)
         elif input_action == LOST_AND_FOUND_INSPECT_DRUID:
-            return DruidCorpse().next(RETURN, session)
+            return DruidCorpse().next(RETURN, session, handler_input)
         elif input_action == STOP_INTENT or input_action == CANCEL_INTENT or input_action == SESSION_ENDED:
-            return SessionEndedRequest().next(input_action, session)
+            return SessionEndedRequest().next(input_action, session, handler_input)
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak(
                  "Pug finds himself in the Lost and Found Corpses department, where a bunch of half eaten corpses are "
@@ -171,7 +171,7 @@ class LostAndFoundCorpses(State):
 
 class RangerCorpse(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(RangerCorpse, self).next(input_action, session)
+        overriding_action = super(RangerCorpse, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -201,9 +201,9 @@ class RangerCorpse(State):
             speech_output = wrap_with_speak(
                 "Pug is back at the dead ranger. " + tldr_whats_in_area + " What should Pug do next?")
         elif input_action == COMMON_GO_BACK or input_action == LOST_AND_FOUND_LOOK_AT_OTHER_BODIES:
-            return LostAndFoundCorpses().next(RETURN, session)
+            return LostAndFoundCorpses().next(RETURN, session, handler_input)
         elif input_action == LOST_AND_FOUND_INSPECT_DRUID:
-            return DruidCorpse().next(RETURN, session)
+            return DruidCorpse().next(RETURN, session, handler_input)
         elif input_action == LOST_AND_FOUND_TAKE_FISH and not session.get_item_inventory().exists(
                 World.ranger_stiff_fish):
             session.get_item_inventory().add(World.ranger_stiff_fish)
@@ -223,7 +223,7 @@ class RangerCorpse(State):
                 "trying to perfect the craft of blowdarts. He has no idea how to use a bow. Pug puts the bow down. "
                 "What should Pug do next?")
         elif input_action == STOP_INTENT or input_action == CANCEL_INTENT or input_action == SESSION_ENDED:
-            return SessionEndedRequest().next(input_action, session)
+            return SessionEndedRequest().next(input_action, session, handler_input)
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak(
                 "A young elf Ranger seems to have met his end here in the Aquarium. Overall, he seems to be quite "
@@ -238,7 +238,7 @@ class RangerCorpse(State):
 
 class DruidCorpse(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(DruidCorpse, self).next(input_action, session)
+        overriding_action = super(DruidCorpse, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -267,9 +267,9 @@ class DruidCorpse(State):
             speech_output = wrap_with_speak(
                 "Pug is back at the dead druid. " + tldr_whats_in_area)
         elif input_action == COMMON_GO_BACK or input_action == LOST_AND_FOUND_LOOK_AT_OTHER_BODIES:
-            return LostAndFoundCorpses().next(RETURN, session)
+            return LostAndFoundCorpses().next(RETURN, session, handler_input)
         elif input_action == LOST_AND_FOUND_INSPECT_DRUID:
-            return DruidCorpse().next(RETURN, session)
+            return DruidCorpse().next(RETURN, session, handler_input)
         elif input_action == LOST_AND_FOUND_TAKE_SATCHEL \
                 and not session.get_event_inventory().exists(Events.druid_look_at_satchel):
             session.get_item_inventory().add(World.charm_animal_scroll)
@@ -290,7 +290,7 @@ class DruidCorpse(State):
             speech_output = wrap_with_speak(
                 "No, it's probably better to quit cold turkey. What should Pug do next?")
         elif input_action == STOP_INTENT or input_action == CANCEL_INTENT or input_action == SESSION_ENDED:
-            return SessionEndedRequest().next(input_action, session)
+            return SessionEndedRequest().next(input_action, session, handler_input)
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak(
                 "A druid lies in front of Pug who seems to have been the victim of a school of ravenous piranhas. It "
@@ -309,7 +309,7 @@ class DruidCorpse(State):
 
 class PiranhaParadiseAquarium(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(PiranhaParadiseAquarium, self).next(input_action, session)
+        overriding_action = super(PiranhaParadiseAquarium, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -335,17 +335,17 @@ class PiranhaParadiseAquarium(State):
                     "ladder that leads up above the tank. To the right is a door marked maintenance. "
                     "What should Pug do next?")
         elif input_action == VISITOR_CENTER_GO_BACK or input_action == COMMON_GO_BACK:
-            return PiranhaParadiseVisitorCenter().next(RETURN, session)
+            return PiranhaParadiseVisitorCenter().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_LEFT or input_action == AQUARIUM_GO_UP_LADDER:
-            return AquariumOnTopOfTheTank().next(RETURN, session)
+            return AquariumOnTopOfTheTank().next(RETURN, session, handler_input)
         elif (input_action == COMMON_GO_RIGHT or input_action == AQUARIUM_GO_TO_MAINTENANCE_ROOM or
               input_action == COMMON_OPEN_THE_DOOR) \
                 and session.get_item_inventory().exists(World.maintenance_room_key):
-            return MaintenanceSwitchboard().next(RETURN, session)
+            return MaintenanceSwitchboard().next(RETURN, session, handler_input)
         elif input_action == COMMON_GO_RIGHT or input_action == AQUARIUM_GO_TO_MAINTENANCE_ROOM or \
                 input_action == COMMON_OPEN_THE_DOOR:
             if session.get_item_inventory().exists(World.maintenance_room_key):
-                return SessionEndedRequest().next(input_action, session)
+                return SessionEndedRequest().next(input_action, session, handler_input)
             else:
                 speech_output = wrap_with_speak(
                     "Pug heads to the door and tries to open it, however the door is locked and he "
@@ -375,7 +375,7 @@ class PiranhaParadiseAquarium(State):
 
 class AquariumOnTopOfTheTank(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(AquariumOnTopOfTheTank, self).next(input_action, session)
+        overriding_action = super(AquariumOnTopOfTheTank, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -412,7 +412,7 @@ class AquariumOnTopOfTheTank(State):
         elif input_action == COMMON_GO_BACK \
                 or input_action == AQUARIUM_GO_DOWN_LADDER \
                 or input_action == AQUARIUM_GO_BACK:
-            return PiranhaParadiseAquarium().next(RETURN, session)
+            return PiranhaParadiseAquarium().next(RETURN, session, handler_input)
         elif input_action == AQUARIUM_INSPECT_THE_LIGHT:
             speech_output = wrap_with_speak(
                 "A light is above the aquarium; hanging by a precariously thin wire. Pug thinks that if only he could "
@@ -421,9 +421,9 @@ class AquariumOnTopOfTheTank(State):
         elif input_action == AQUARIUM_ENTER_WATER:
             if session.get_event_inventory().exists(Events.piranhas_all_gone):
                 if session.get_is_keeper_trapper_purchased():
-                    return KeeperTrapperExecutiveWashroom().next(RETURN, session)
+                    return KeeperTrapperExecutiveWashroom().next(RETURN, session, handler_input)
                 else:
-                    return EndingState().next(RETURN, session)
+                    return EndingState().next(RETURN, session, handler_input)
             else:
                 speech_output = wrap_with_speak(
                     "Pug dips a toe into the water, which immediately begins getting bitten by ravenous piranhas. "
@@ -456,7 +456,7 @@ class AquariumOnTopOfTheTank(State):
                     "animal seems to only affect one fish at a time. So, while one of the 3,000 or so piranhas seems "
                     "particularly enamoured with Pug, the others aren't quite as amused. What should Pug do next?")
         elif input_action == STOP_INTENT or input_action == CANCEL_INTENT or input_action == SESSION_ENDED:
-            return SessionEndedRequest().next(input_action, session)
+            return SessionEndedRequest().next(input_action, session, handler_input)
         else:
             speech_output = wrap_with_speak(
                 "Pug is above the tank. " + tldr_whats_in_area)
@@ -466,7 +466,7 @@ class AquariumOnTopOfTheTank(State):
 
 class MaintenanceSwitchboard(State):
     def next(self, input_action, session, handler_input):
-        overriding_action = super(MaintenanceSwitchboard, self).next(input_action, session)
+        overriding_action = super(MaintenanceSwitchboard, self).next(input_action, session, handler_input)
         if overriding_action is not None:
             return overriding_action
 
@@ -494,7 +494,7 @@ class MaintenanceSwitchboard(State):
         elif input_action == INITIALIZE or input_action == RETURN or input_action == LAUNCH_REQUEST:
             speech_output = wrap_with_speak("Pug is staring at the switchboard again. What should Pug do next?")
         elif input_action == COMMON_GO_BACK:
-            return PiranhaParadiseAquarium().next(RETURN, session)
+            return PiranhaParadiseAquarium().next(RETURN, session, handler_input)
         elif input_action == COMMON_DESCRIBE_AREA_AGAIN:
             speech_output = wrap_with_speak("Pug is in front of the complicated panel. " + detailed_description)
         elif input_action == SWITCHBOARD_PULL_LEVER_ONE:
@@ -612,7 +612,7 @@ class MaintenanceSwitchboard(State):
                 "Pug pushes the button labelled scream. In the distance, he can hear the sound of someone screaming. "
                 "Entertaining, but not very useful. What should Pug do next?")
         elif input_action == STOP_INTENT or input_action == CANCEL_INTENT or input_action == SESSION_ENDED:
-            return SessionEndedRequest().next(input_action, session)
+            return SessionEndedRequest().next(input_action, session, handler_input)
         else:
             speech_output = wrap_with_speak("Pug is in the maintenance room. " + tldr_description)
 

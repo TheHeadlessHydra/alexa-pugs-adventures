@@ -17,7 +17,9 @@ class TableConnection(object):
                  session_cls=None,
                  request_timeout_seconds=None,
                  max_retry_attempts=None,
-                 base_backoff_ms=None):
+                 base_backoff_ms=None,
+                 aws_access_key_id=None,
+                 aws_secret_access_key=None):
         self._hash_keyname = None
         self._range_keyname = None
         self.table_name = table_name
@@ -27,6 +29,16 @@ class TableConnection(object):
                                      request_timeout_seconds=request_timeout_seconds,
                                      max_retry_attempts=max_retry_attempts,
                                      base_backoff_ms=base_backoff_ms)
+
+        if aws_access_key_id and aws_secret_access_key:
+            self.connection.session.set_credentials(aws_access_key_id,
+                                                    aws_secret_access_key)
+
+    def get_meta_table(self, refresh=False):
+        """
+        Returns a MetaTable
+        """
+        return self.connection.get_meta_table(self.table_name, refresh=refresh)
 
     def delete_item(self, hash_key,
                     range_key=None,
@@ -139,7 +151,8 @@ class TableConnection(object):
             consistent_read=consistent_read,
             attributes_to_get=attributes_to_get)
 
-    def rate_limited_scan(self,
+    def rate_limited_scan(
+             self,
              filter_condition=None,
              attributes_to_get=None,
              page_size=None,
@@ -154,7 +167,8 @@ class TableConnection(object):
              allow_rate_limited_scan_without_consumed_capacity=None,
              max_sleep_between_retry=None,
              max_consecutive_exceptions=None,
-             consistent_read=None):
+             consistent_read=None,
+             index_name=None):
         """
         Performs the scan operation with rate limited
         """
@@ -174,7 +188,8 @@ class TableConnection(object):
             allow_rate_limited_scan_without_consumed_capacity=allow_rate_limited_scan_without_consumed_capacity,
             max_sleep_between_retry=max_sleep_between_retry,
             max_consecutive_exceptions=max_consecutive_exceptions,
-            consistent_read=consistent_read)
+            consistent_read=consistent_read,
+            index_name=index_name)
 
     def scan(self,
              filter_condition=None,
@@ -186,7 +201,8 @@ class TableConnection(object):
              segment=None,
              total_segments=None,
              exclusive_start_key=None,
-             consistent_read=None):
+             consistent_read=None,
+             index_name=None):
         """
         Performs the scan operation
         """
@@ -201,7 +217,8 @@ class TableConnection(object):
             segment=segment,
             total_segments=total_segments,
             exclusive_start_key=exclusive_start_key,
-            consistent_read=consistent_read)
+            consistent_read=consistent_read,
+            index_name=index_name)
 
     def query(self,
               hash_key,
@@ -250,6 +267,12 @@ class TableConnection(object):
         Performs the DeleteTable operation and returns the result
         """
         return self.connection.delete_table(self.table_name)
+
+    def update_time_to_live(self, ttl_attr_name):
+        """
+        Performs the UpdateTimeToLive operation and returns the result
+        """
+        return self.connection.update_time_to_live(self.table_name, ttl_attr_name)
 
     def update_table(self,
                      read_capacity_units=None,

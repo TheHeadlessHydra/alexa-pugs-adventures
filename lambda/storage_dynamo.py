@@ -25,7 +25,7 @@ class DynamoSession(Model):
 
 class DynamoStorage(Storage):
     def write_json_string(self, id, json_string):
-        print("Writing id to dynamo: " + str(id) + ", with json blob: " + str(json_string))
+        print("Writing id to dynamo: {}, with json blob: {}".format(str(id), str(json_string)))
         dynamo_session_item = DynamoSession(id, session=json_string)
         dynamo_session_item.save()
 
@@ -35,7 +35,7 @@ class DynamoStorage(Storage):
         :param user_id: The user id of the session state to get
         :return: session_state json blob if user id exists, or None if user id does not exist
         """
-        print "Searching for session for user with user_id: " + str(id)
+        print("Searching for session for user with user_id: {}".format(str(id)))
         json_string = None
         count = 0
         for dynamo_item in DynamoSession.query(id):

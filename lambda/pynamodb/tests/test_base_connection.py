@@ -6,10 +6,12 @@ import json
 import six
 from pynamodb.compat import CompatTestCase as TestCase
 from pynamodb.connection import Connection
+from pynamodb.connection.base import MetaTable
 from botocore.vendored import requests
 from pynamodb.exceptions import (VerboseClientError,
     TableError, DeleteError, UpdateError, PutError, GetError, ScanError, QueryError, TableDoesNotExist)
-from pynamodb.constants import DEFAULT_REGION, UNPROCESSED_ITEMS, STRING_SHORT, BINARY_SHORT, DEFAULT_ENCODING
+from pynamodb.constants import (
+    DEFAULT_REGION, UNPROCESSED_ITEMS, STRING_SHORT, BINARY_SHORT, DEFAULT_ENCODING, TABLE_KEY)
 from pynamodb.expressions.operand import Path
 from pynamodb.tests.data import DESCRIBE_TABLE_DATA, GET_ITEM_DATA, LIST_TABLE_DATA
 from pynamodb.tests.deep_eq import deep_eq
@@ -23,6 +25,23 @@ else:
     import mock
 
 PATCH_METHOD = 'pynamodb.connection.Connection._make_api_call'
+
+
+class MetaTableTestCase(TestCase):
+    """
+    Tests for the meta table class
+    """
+
+    def setUp(self):
+        self.meta_table = MetaTable(DESCRIBE_TABLE_DATA.get(TABLE_KEY))
+
+    def test_get_key_names(self):
+        key_names = self.meta_table.get_key_names()
+        self.assertEqual(key_names, ["ForumName", "Subject"])
+
+    def test_get_key_names_index(self):
+        key_names = self.meta_table.get_key_names("LastPostIndex")
+        self.assertEqual(key_names, ["ForumName", "Subject", "LastPostDateTime"])
 
 
 class ConnectionTestCase(TestCase):
@@ -2022,7 +2041,8 @@ class ConnectionTestCase(TestCase):
                 limit=1,
                 segment=2,
                 total_segments=4,
-                attributes_to_get=['ForumName']
+                attributes_to_get=['ForumName'],
+                index_name='LastPostIndex',
             )
             params = {
                 'ProjectionExpression': '#0',
@@ -2038,7 +2058,8 @@ class ConnectionTestCase(TestCase):
                 'Limit': 1,
                 'Segment': 2,
                 'TotalSegments': 4,
-                'ReturnConsumedCapacity': 'TOTAL'
+                'ReturnConsumedCapacity': 'TOTAL',
+                'IndexName': 'LastPostIndex'
             }
             self.assertEqual(req.call_args[0][1], params)
 
@@ -2584,6 +2605,44 @@ class ConnectionTestCase(TestCase):
             _assert=True
         )
 
+    def test_handle_binary_attributes_for_unprocessed_keys(self):
+        binary_blob = six.b('\x00\xFF\x00\xFF')
+        unprocessed_keys = {
+            'UnprocessedKeys': {
+                'MyTable': {
+                    'AttributesToGet': ['ForumName'],
+                    'Keys': [
+                        {
+                            'ForumName': {'S': 'FooForum'},
+                            'Subject': {'B': base64.b64encode(binary_blob).decode(DEFAULT_ENCODING)}
+                        },
+                        {
+                            'ForumName': {'S': 'FooForum'},
+                            'Subject': {'S': 'thread-1'}
+                        }
+                    ],
+                    'ConsistentRead': False
+                },
+                'MyOtherTable': {
+                    'AttributesToGet': ['ForumName'],
+                    'Keys': [
+                        {
+                            'ForumName': {'S': 'FooForum'},
+                            'Subject': {'B': base64.b64encode(binary_blob).decode(DEFAULT_ENCODING)}
+                        },
+                        {
+                            'ForumName': {'S': 'FooForum'},
+                            'Subject': {'S': 'thread-1'}
+                        }
+                    ],
+                    'ConsistentRead': False
+                }
+            }
+        }
+        data = Connection._handle_binary_attributes(unprocessed_keys)
+        self.assertEqual(data['UnprocessedKeys']['MyTable']['Keys'][0]['Subject']['B'], binary_blob)
+        self.assertEqual(data['UnprocessedKeys']['MyOtherTable']['Keys'][0]['Subject']['B'], binary_blob)
+
     def test_get_expected_map(self):
         conn = Connection(self.region)
         with patch(PATCH_METHOD) as req:
@@ -2613,6 +2672,12 @@ class ConnectionTestCase(TestCase):
             conn.get_expected_map(self.test_table_name, expected),
             {'Expected': {'ForumName': {'ComparisonOperator': 'EQ', 'AttributeValueList': [{'S': 'foo'}]}}}
         )
+
+    def test_update_time_to_live_fail(self):
+        conn = Connection(self.region)
+        with patch(PATCH_METHOD) as req:
+            req.side_effect = BotoCoreError
+            self.assertRaises(TableError, conn.update_time_to_live, 'test table', 'my_ttl')
 
     def test_get_query_filter_map(self):
         conn = Connection(self.region)

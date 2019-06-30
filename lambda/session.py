@@ -59,7 +59,7 @@ class Session(object):
         return seen_location_before
 
     def set_seen_location_before_deserialize(self, session_state):
-        seen_location_before = Set()
+        seen_location_before = set()
         for location in session_state.seen_location_before:
             seen_location_before.add(location)
         return seen_location_before

@@ -15,12 +15,12 @@ class SessionEndedRequest(State):
 
 class StopIntent(State):
     def next(self, input_action, session, handler_input):
-        return SessionEndedRequest().next(input_action, session)
+        return SessionEndedRequest().next(input_action, session, handler_input)
 
 
 class CancelIntent(State):
     def next(self, input_action, session, handler_input):
-        return SessionEndedRequest().next(input_action, session)
+        return SessionEndedRequest().next(input_action, session, handler_input)
 
 
 class HelpIntent(State):

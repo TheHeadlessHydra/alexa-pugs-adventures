@@ -69,7 +69,7 @@ def lambda_handler(event, context):
 
     print("state_machine: {}".format(state_machine))
 
-    return_object = state_machine.next(input_action)
+    return_object = state_machine.next(input_action, handler_input)
     print(return_object)
     print("PROPER END========================")
 
@@ -145,6 +145,8 @@ def supersede_build_state_machine(input_action, session):
         return initialize_new_help_game(session)
     elif input_action == COMMON_OPTIONS_MENU:
         return initialize_new_options_menu(session)
+    elif input_action.startswith("ISP"):
+        return initialize_new_state_machine_from_input(input_action, session=session)
 
     return None
 

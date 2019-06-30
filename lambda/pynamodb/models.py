@@ -10,7 +10,8 @@ import warnings
 
 from six import add_metaclass
 from pynamodb.exceptions import DoesNotExist, TableDoesNotExist, TableError
-from pynamodb.attributes import Attribute, AttributeContainer, AttributeContainerMeta, MapAttribute, ListAttribute
+from pynamodb.attributes import (
+    Attribute, AttributeContainer, AttributeContainerMeta, MapAttribute, ListAttribute, TTLAttribute)
 from pynamodb.connection.base import MetaTable
 from pynamodb.connection.table import TableConnection
 from pynamodb.connection.util import pythonic
@@ -61,9 +62,14 @@ class BatchWrite(ModelContextManager):
     """
     def save(self, put_item):
         """
-        This adds `put_item` to the list of pending writes to be performed.
-        Additionally, the a BatchWriteItem will be performed if the length of items
-        reaches 25.
+        This adds `put_item` to the list of pending operations to be performed.
+
+        If the list currently contains 25 items, which is the DynamoDB imposed
+        limit on a BatchWriteItem call, one of two things will happen. If auto_commit
+        is True, a BatchWriteItem operation will be sent with the already pending
+        writes after which put_item is appended to the (now empty) list. If auto_commit
+        is False, ValueError is raised to indicate additional items cannot be accepted
+        due to the DynamoDB imposed limit.
 
         :param put_item: Should be an instance of a `Model` to be written
         """
@@ -76,8 +82,14 @@ class BatchWrite(ModelContextManager):
 
     def delete(self, del_item):
         """
-        This adds `del_item` to the list of pending deletes to be performed.
-        If the list of items reaches 25, a BatchWriteItem will be called.
+        This adds `del_item` to the list of pending operations to be performed.
+
+        If the list currently contains 25 items, which is the DynamoDB imposed
+        limit on a BatchWriteItem call, one of two things will happen. If auto_commit
+        is True, a BatchWriteItem operation will be sent with the already pending
+        operations after which put_item is appended to the (now empty) list. If auto_commit
+        is False, ValueError is raised to indicate additional items cannot be accepted
+        due to the DynamoDB imposed limit.
 
         :param del_item: Should be an instance of a `Model` to be deleted
         """
@@ -173,6 +185,10 @@ class MetaModel(AttributeContainerMeta):
                         setattr(attr_obj, 'base_backoff_ms', get_settings_value('base_backoff_ms'))
                     if not hasattr(attr_obj, 'max_retry_attempts'):
                         setattr(attr_obj, 'max_retry_attempts', get_settings_value('max_retry_attempts'))
+                    if not hasattr(attr_obj, 'aws_access_key_id'):
+                        setattr(attr_obj, 'aws_access_key_id', None)
+                    if not hasattr(attr_obj, 'aws_secret_access_key'):
+                        setattr(attr_obj, 'aws_secret_access_key', None)
                 elif issubclass(attr_obj.__class__, (Index, )):
                     attr_obj.Meta.model = cls
                     if not hasattr(attr_obj.Meta, "index_name"):
@@ -180,6 +196,10 @@ class MetaModel(AttributeContainerMeta):
                 elif issubclass(attr_obj.__class__, (Attribute, )):
                     if attr_obj.attr_name is None:
                         attr_obj.attr_name = attr_name
+
+            ttl_attr_names = [name for name, attr_obj in attrs.items() if isinstance(attr_obj, TTLAttribute)]
+            if len(ttl_attr_names) > 1:
+                raise ValueError("The model has more than one TTL attribute: {}".format(", ".join(ttl_attr_names)))
 
             if META_CLASS_NAME not in attrs:
                 setattr(cls, META_CLASS_NAME, DefaultMeta)
@@ -210,7 +230,7 @@ class Model(AttributeContainer):
     _index_classes = None
     DoesNotExist = DoesNotExist
 
-    def __init__(self, hash_key=None, range_key=None, **attributes):
+    def __init__(self, hash_key=None, range_key=None, _user_instantiated=True, **attributes):
         """
         :param hash_key: Required. The hash key for this object.
         :param range_key: Only required if the table has a range key attribute.
@@ -225,11 +245,11 @@ class Model(AttributeContainer):
                     "This table has no range key, but a range key value was provided: {0}".format(range_key)
                 )
             attributes[self._dynamo_to_python_attr(range_keyname)] = range_key
-        super(Model, self).__init__(**attributes)
+        super(Model, self).__init__(_user_instantiated=_user_instantiated, **attributes)
 
     @classmethod
     def has_map_or_list_attributes(cls):
-        for attr_value in cls._get_attributes().values():
+        for attr_value in cls.get_attributes().values():
             if isinstance(attr_value, MapAttribute) or isinstance(attr_value, ListAttribute):
                 return True
         return False
@@ -294,9 +314,13 @@ class Model(AttributeContainer):
     @classmethod
     def batch_write(cls, auto_commit=True):
         """
-        Returns a context manager for a batch operation'
+        Returns a BatchWrite context manager for a batch operation.
 
-        :param auto_commit: Commits writes automatically if `True`
+        :param auto_commit: If true, the context manager will commit writes incrementally
+                            as items are written to as necessary to honor item count limits
+                            in the DynamoDB API (see BatchWrite). Regardless of the value
+                            passed here, changes automatically commit on context exit
+                            (whether successful or not).
         """
         return BatchWrite(cls, auto_commit=auto_commit)
 
@@ -337,7 +361,7 @@ class Model(AttributeContainer):
         self._conditional_operator_check(conditional_operator)
         args, save_kwargs = self._get_save_args(null_check=False)
         attribute_cls = None
-        for attr_name, attr_cls in self._get_attributes().items():
+        for attr_name, attr_cls in self.get_attributes().items():
             if attr_name == attribute:
                 attribute_cls = attr_cls
                 break
@@ -368,9 +392,9 @@ class Model(AttributeContainer):
 
         for name, value in data.get(ATTRIBUTES).items():
             attr_name = self._dynamo_to_python_attr(name)
-            attr = self._get_attributes().get(attr_name)
+            attr = self.get_attributes().get(attr_name)
             if attr:
-                setattr(self, attr_name, attr.deserialize(value.get(ATTR_TYPE_MAP[attr.attr_type])))
+                setattr(self, attr_name, attr.deserialize(attr.get_value(value)))
         return data
 
     def update(self, attributes=None, actions=None, condition=None, conditional_operator=None, **expected_values):
@@ -404,7 +428,7 @@ class Model(AttributeContainer):
         if expected_values:
             kwargs['expected'] = self._build_expected_values(expected_values, UPDATE_FILTER_OPERATOR_MAP)
 
-        attrs = self._get_attributes()
+        attrs = self.get_attributes()
         attributes = attributes or {}
         for attr, params in attributes.items():
             attribute_cls = attrs[attr]
@@ -420,9 +444,9 @@ class Model(AttributeContainer):
         data = self._get_connection().update_item(*args, **kwargs)
         for name, value in data[ATTRIBUTES].items():
             attr_name = self._dynamo_to_python_attr(name)
-            attr = self._get_attributes().get(attr_name)
+            attr = self.get_attributes().get(attr_name)
             if attr:
-                setattr(self, attr_name, attr.deserialize(value.get(ATTR_TYPE_MAP[attr.attr_type])))
+                setattr(self, attr_name, attr.deserialize(attr.get_value(value)))
         return data
 
     def save(self, condition=None, conditional_operator=None, **expected_values):
@@ -455,7 +479,8 @@ class Model(AttributeContainer):
     def get(cls,
             hash_key,
             range_key=None,
-            consistent_read=False):
+            consistent_read=False,
+            attributes_to_get=None):
         """
         Returns a single object using the provided keys
 
@@ -466,7 +491,8 @@ class Model(AttributeContainer):
         data = cls._get_connection().get_item(
             hash_key,
             range_key=range_key,
-            consistent_read=consistent_read
+            consistent_read=consistent_read,
+            attributes_to_get=attributes_to_get
         )
         if data:
             item_data = data.get(ITEM)
@@ -490,22 +516,22 @@ class Model(AttributeContainer):
         hash_key_type = cls._get_meta_data().get_attribute_type(hash_keyname)
         hash_key = mutable_data.pop(hash_keyname).get(hash_key_type)
 
-        hash_key_attr = cls._get_attributes().get(cls._dynamo_to_python_attr(hash_keyname))
+        hash_key_attr = cls.get_attributes().get(cls._dynamo_to_python_attr(hash_keyname))
 
         hash_key = hash_key_attr.deserialize(hash_key)
         args = (hash_key,)
         kwargs = {}
         if range_keyname:
-            range_key_attr = cls._get_attributes().get(cls._dynamo_to_python_attr(range_keyname))
+            range_key_attr = cls.get_attributes().get(cls._dynamo_to_python_attr(range_keyname))
             range_key_type = cls._get_meta_data().get_attribute_type(range_keyname)
             range_key = mutable_data.pop(range_keyname).get(range_key_type)
             kwargs['range_key'] = range_key_attr.deserialize(range_key)
         for name, value in mutable_data.items():
             attr_name = cls._dynamo_to_python_attr(name)
-            attr = cls._get_attributes().get(attr_name, None)
+            attr = cls.get_attributes().get(attr_name, None)
             if attr:
                 kwargs[attr_name] = attr.deserialize(attr.get_value(value))
-        return cls(*args, **kwargs)
+        return cls(*args, _user_instantiated=False, **kwargs)
 
     @classmethod
     def count(cls,
@@ -515,6 +541,7 @@ class Model(AttributeContainer):
               consistent_read=False,
               index_name=None,
               limit=None,
+              rate_limit=None,
               **filters):
         """
         Provides a filtered count
@@ -524,6 +551,7 @@ class Model(AttributeContainer):
         :param filter_condition: Condition used to restrict the query results
         :param consistent_read: If True, a consistent read is performed
         :param index_name: If set, then this index is used
+        :param rate_limit: If set then consumed capacity will be limited to this amount per second
         :param filters: A dictionary of filters to be used in the query. Requires a hash_key to be passed.
         """
         if hash_key is None:
@@ -535,12 +563,12 @@ class Model(AttributeContainer):
         if index_name:
             hash_key = cls._index_classes[index_name]._hash_key_attribute().serialize(hash_key)
             key_attribute_classes = cls._index_classes[index_name]._get_attributes()
-            non_key_attribute_classes = cls._get_attributes()
+            non_key_attribute_classes = cls.get_attributes()
         else:
             hash_key = cls._serialize_keys(hash_key)[0]
-            non_key_attribute_classes = dict(cls._get_attributes())
-            key_attribute_classes = dict(cls._get_attributes())
-            for name, attr in cls._get_attributes().items():
+            non_key_attribute_classes = dict(cls.get_attributes())
+            key_attribute_classes = dict(cls.get_attributes())
+            for name, attr in cls.get_attributes().items():
                 if attr.is_range_key or attr.is_hash_key:
                     key_attribute_classes[name] = attr
                 else:
@@ -568,7 +596,8 @@ class Model(AttributeContainer):
             cls._get_connection().query,
             query_args,
             query_kwargs,
-            limit=limit
+            limit=limit,
+            rate_limit=rate_limit
         )
 
         # iterate through results
@@ -589,6 +618,7 @@ class Model(AttributeContainer):
               last_evaluated_key=None,
               attributes_to_get=None,
               page_size=None,
+              rate_limit=None,
               **filters):
         """
         Provides a high level query API
@@ -612,12 +642,12 @@ class Model(AttributeContainer):
         if index_name:
             hash_key = cls._index_classes[index_name]._hash_key_attribute().serialize(hash_key)
             key_attribute_classes = cls._index_classes[index_name]._get_attributes()
-            non_key_attribute_classes = cls._get_attributes()
+            non_key_attribute_classes = cls.get_attributes()
         else:
             hash_key = cls._serialize_keys(hash_key)[0]
             non_key_attribute_classes = {}
             key_attribute_classes = {}
-            for name, attr in cls._get_attributes().items():
+            for name, attr in cls.get_attributes().items():
                 if attr.is_range_key or attr.is_hash_key:
                     key_attribute_classes[name] = attr
                 else:
@@ -653,7 +683,8 @@ class Model(AttributeContainer):
             query_args,
             query_kwargs,
             map_fn=cls.from_raw_data,
-            limit=limit
+            limit=limit,
+            rate_limit=rate_limit
         )
 
     @classmethod
@@ -672,6 +703,7 @@ class Model(AttributeContainer):
             max_sleep_between_retry=10,
             max_consecutive_exceptions=30,
             consistent_read=None,
+            index_name=None,
             **filters):
         """
         Scans the items in the table at a definite rate.
@@ -703,7 +735,7 @@ class Model(AttributeContainer):
         key_filter, scan_filter = cls._build_filters(
             SCAN_OPERATOR_MAP,
             non_key_operator_map=SCAN_OPERATOR_MAP,
-            key_attribute_classes=cls._get_attributes(),
+            key_attribute_classes=cls.get_attributes(),
             filters=filters
         )
         key_filter.update(scan_filter)
@@ -724,6 +756,7 @@ class Model(AttributeContainer):
             max_sleep_between_retry=max_sleep_between_retry,
             max_consecutive_exceptions=max_consecutive_exceptions,
             consistent_read=consistent_read,
+            index_name=index_name
         )
 
         for item in scan_result:
@@ -739,6 +772,8 @@ class Model(AttributeContainer):
              last_evaluated_key=None,
              page_size=None,
              consistent_read=None,
+             index_name=None,
+             rate_limit=None,
              **filters):
         """
         Iterates through all items in the table
@@ -757,7 +792,7 @@ class Model(AttributeContainer):
         key_filter, scan_filter = cls._build_filters(
             SCAN_OPERATOR_MAP,
             non_key_operator_map=SCAN_OPERATOR_MAP,
-            key_attribute_classes=cls._get_attributes(),
+            key_attribute_classes=cls.get_attributes(),
             filters=filters
         )
         key_filter.update(scan_filter)
@@ -774,7 +809,8 @@ class Model(AttributeContainer):
             scan_filter=key_filter,
             total_segments=total_segments,
             conditional_operator=conditional_operator,
-            consistent_read=consistent_read
+            consistent_read=consistent_read,
+            index_name=index_name
         )
 
         return ResultIterator(
@@ -782,7 +818,8 @@ class Model(AttributeContainer):
             scan_args,
             scan_kwargs,
             map_fn=cls.from_raw_data,
-            limit=limit
+            limit=limit,
+            rate_limit=rate_limit,
         )
 
     @classmethod
@@ -811,7 +848,12 @@ class Model(AttributeContainer):
         return cls._get_connection().describe_table()
 
     @classmethod
-    def create_table(cls, wait=False, read_capacity_units=None, write_capacity_units=None):
+    def create_table(
+        cls,
+        wait=False,
+        read_capacity_units=None,
+        write_capacity_units=None,
+        ignore_update_ttl_errors=False):
         """
         Create the table for this model
 
@@ -853,11 +895,31 @@ class Model(AttributeContainer):
                 if status:
                     data = status.get(TABLE_STATUS)
                     if data == ACTIVE:
-                        return
+                        break
                     else:
                         time.sleep(2)
                 else:
                     raise TableError("No TableStatus returned for table")
+
+        cls.update_ttl(ignore_update_ttl_errors)
+
+    @classmethod
+    def update_ttl(cls, ignore_update_ttl_errors):
+        """
+        Attempt to update the TTL on the table.
+        Certain implementations (eg: dynalite) do not support updating TTLs and will fail.
+        """
+        ttl_attribute = cls._ttl_attribute()
+        if ttl_attribute:
+            # Some dynamoDB implementations (eg: dynalite) do not support updating TTLs so
+            # this will fail.  It's fine for this to fail in those cases.
+            try:
+                cls._get_connection().update_time_to_live(ttl_attribute.attr_name)
+            except Exception:
+                if ignore_update_ttl_errors:
+                    log.info("Unable to update the TTL for {}".format(cls.Meta.table_name))
+                else:
+                    raise
 
     @classmethod
     def dumps(cls):
@@ -907,7 +969,7 @@ class Model(AttributeContainer):
             attributes[range_keyname] = {
                 range_keytype: range_key
             }
-        item = cls()
+        item = cls(_user_instantiated=False)
         item._deserialize(attributes)
         return item
 
@@ -919,7 +981,7 @@ class Model(AttributeContainer):
         :param expected_values: A list of expected values
         """
         expected_values_result = {}
-        attributes = cls._get_attributes()
+        attributes = cls.get_attributes()
         filters = {}
         for attr_name, attr_value in expected_values.items():
             attr_cond = VALUE
@@ -1078,7 +1140,7 @@ class Model(AttributeContainer):
             pythonic(ATTR_DEFINITIONS): [],
             pythonic(KEY_SCHEMA): []
         }
-        for attr_name, attr_cls in cls._get_attributes().items():
+        for attr_name, attr_cls in cls.get_attributes().items():
             if attr_cls.is_hash_key or attr_cls.is_range_key:
                 schema[pythonic(ATTR_DEFINITIONS)].append({
                     pythonic(ATTR_NAME): attr_cls.attr_name,
@@ -1171,7 +1233,7 @@ class Model(AttributeContainer):
         """
         Returns the attribute class for the hash key
         """
-        attributes = cls._get_attributes()
+        attributes = cls.get_attributes()
         range_keyname = cls._get_meta_data().range_keyname
         if range_keyname:
             attr = attributes[cls._dynamo_to_python_attr(range_keyname)]
@@ -1184,9 +1246,20 @@ class Model(AttributeContainer):
         """
         Returns the attribute class for the hash key
         """
-        attributes = cls._get_attributes()
+        attributes = cls.get_attributes()
         hash_keyname = cls._get_meta_data().hash_keyname
         return attributes[cls._dynamo_to_python_attr(hash_keyname)]
+
+    @classmethod
+    def _ttl_attribute(cls):
+        """
+        Returns the ttl attribute for this table
+        """
+        attributes = cls.get_attributes()
+        for attr_obj in attributes.values():
+            if isinstance(attr_obj, TTLAttribute):
+                return attr_obj
+        return None
 
     def _get_keys(self):
         """
@@ -1236,10 +1309,21 @@ class Model(AttributeContainer):
         """
         Returns a (cached) connection
         """
-        if not hasattr(cls, "Meta") or cls.Meta.table_name is None:
+        if not hasattr(cls, "Meta"):
             raise AttributeError(
-                """As of v1.0 PynamoDB Models require a `Meta` class.
-                See https://pynamodb.readthedocs.io/en/latest/release_notes.html"""
+                'As of v1.0 PynamoDB Models require a `Meta` class.\n'
+                'Model: {0}.{1}\n'
+                'See https://pynamodb.readthedocs.io/en/latest/release_notes.html\n'.format(
+                    cls.__module__, cls.__name__,
+                ),
+            )
+        elif not hasattr(cls.Meta, "table_name") or cls.Meta.table_name is None:
+            raise AttributeError(
+                'As of v1.0 PyanmoDB Models must have a table_name\n'
+                'Model: {0}.{1}\n'
+                'See https://pynamodb.readthedocs.io/en/latest/release_notes.html'.format(
+                    cls.__module__, cls.__name__,
+                ),
             )
         if cls._connection is None:
             cls._connection = TableConnection(cls.Meta.table_name,
@@ -1248,7 +1332,9 @@ class Model(AttributeContainer):
                                               session_cls=cls.Meta.session_cls,
                                               request_timeout_seconds=cls.Meta.request_timeout_seconds,
                                               max_retry_attempts=cls.Meta.max_retry_attempts,
-                                              base_backoff_ms=cls.Meta.base_backoff_ms)
+                                              base_backoff_ms=cls.Meta.base_backoff_ms,
+                                              aws_access_key_id=cls.Meta.aws_access_key_id,
+                                              aws_secret_access_key=cls.Meta.aws_secret_access_key)
         return cls._connection
 
     def _deserialize(self, attrs):
@@ -1257,7 +1343,7 @@ class Model(AttributeContainer):
 
         :param attrs: A dictionary of attributes to update this item with.
         """
-        for name, attr in self._get_attributes().items():
+        for name, attr in self.get_attributes().items():
             value = attrs.get(attr.attr_name, None)
             if value is not None:
                 value = value.get(ATTR_TYPE_MAP[attr.attr_type], None)
@@ -1274,7 +1360,7 @@ class Model(AttributeContainer):
         """
         attributes = pythonic(ATTRIBUTES)
         attrs = {attributes: {}}
-        for name, attr in self._get_attributes().items():
+        for name, attr in self.get_attributes().items():
             value = getattr(self, name)
             if isinstance(value, MapAttribute):
                 if not value.validate():

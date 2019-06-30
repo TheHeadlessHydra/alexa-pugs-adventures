@@ -33,6 +33,17 @@ class ConnectionTestCase(TestCase):
         conn = TableConnection(self.test_table_name)
         self.assertIsNotNone(conn)
 
+    def test_connection_session_set_credentials(self):
+        conn = TableConnection(
+            self.test_table_name,
+            aws_access_key_id='access_key_id',
+            aws_secret_access_key='secret_access_key')
+
+        credentials = conn.connection.session.get_credentials()
+
+        self.assertEqual(credentials.access_key, 'access_key_id')
+        self.assertEqual(credentials.secret_key, 'secret_access_key')
+
     def test_create_table(self):
         """
         TableConnection.create_table
@@ -96,6 +107,24 @@ class ConnectionTestCase(TestCase):
             conn.create_table(
                 **kwargs
             )
+            kwargs = req.call_args[0][1]
+            self.assertEqual(kwargs, params)
+
+    def test_update_time_to_live(self):
+        """
+        TableConnection.update_time_to_live
+        """
+        params = {
+            'TableName': 'ci-table',
+            'TimeToLiveSpecification': {
+                'AttributeName': 'ttl_attr',
+                'Enabled': True,
+            }
+        }
+        with patch(PATCH_METHOD) as req:
+            req.return_value = HttpOK(), None
+            conn = TableConnection(self.test_table_name)
+            conn.update_time_to_live('ttl_attr')
             kwargs = req.call_args[0][1]
             self.assertEqual(kwargs, params)
 
@@ -571,7 +600,8 @@ class ConnectionTestCase(TestCase):
                 allow_rate_limited_scan_without_consumed_capacity=False,
                 max_sleep_between_retry=3,
                 max_consecutive_exceptions=7,
-                consistent_read=True
+                consistent_read=True,
+                index_name='index'
             )
             self.assertEqual(self.test_table_name, req.call_args[0][0])
             params = {
@@ -589,6 +619,7 @@ class ConnectionTestCase(TestCase):
                 'allow_rate_limited_scan_without_consumed_capacity': False,
                 'max_sleep_between_retry': 3,
                 'max_consecutive_exceptions': 7,
-                'consistent_read': True
+                'consistent_read': True,
+                'index_name': 'index'
             }
             self.assertEqual(params, req.call_args[1])

@@ -1,12 +1,15 @@
 """
 PynamoDB attributes
 """
+import calendar
 import six
 from six import add_metaclass
 import json
+import time
 from base64 import b64encode, b64decode
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
+import warnings
 from dateutil.parser import parse
 from dateutil.tz import tzutc
 from inspect import getargspec
@@ -14,7 +17,7 @@ from pynamodb.constants import (
     STRING, STRING_SHORT, NUMBER, BINARY, UTC, DATETIME_FORMAT, BINARY_SET, STRING_SET, NUMBER_SET,
     MAP, MAP_SHORT, LIST, LIST_SHORT, DEFAULT_ENCODING, BOOLEAN, ATTR_TYPE_MAP, NUMBER_SHORT, NULL, SHORT_ATTR_TYPES
 )
-from pynamodb.compat import getmembers_issubclass
+from pynamodb.compat import getmembers_issubclass, timedelta_total_seconds
 from pynamodb.expressions.operand import Path
 import collections
 
@@ -31,9 +34,15 @@ class Attribute(object):
                  range_key=False,
                  null=None,
                  default=None,
+                 default_for_new=None,
                  attr_name=None
                  ):
+        if default and default_for_new:
+            raise ValueError("An attribute cannot have both default and default_for_new parameters")
         self.default = default
+        # This default is only set for new objects (ie: it's not set for re-saved objects)
+        self.default_for_new = default_for_new
+
         if null is not None:
             self.null = null
         self.is_hash_key = hash_key
@@ -89,11 +98,15 @@ class Attribute(object):
 
     # Condition Expression Support
     def __eq__(self, other):
+        if isinstance(other, MapAttribute) and other._is_attribute_container():
+            return Path(self).__eq__(other)
         if other is None or isinstance(other, Attribute):  # handle object identity comparison
             return self is other
         return Path(self).__eq__(other)
 
     def __ne__(self, other):
+        if isinstance(other, MapAttribute) and other._is_attribute_container():
+            return Path(self).__ne__(other)
         if other is None or isinstance(other, Attribute):  # handle object identity comparison
             return self is not other
         return Path(self).__ne__(other)
@@ -163,11 +176,11 @@ class Attribute(object):
     def remove(self):
         return Path(self).remove()
 
-    def add(self, value):
-        return Path(self).add(value)
+    def add(self, *values):
+        return Path(self).add(*values)
 
-    def delete(self, value):
-        return Path(self).delete(value)
+    def delete(self, *values):
+        return Path(self).delete(*values)
 
 
 class AttributeContainerMeta(type):
@@ -207,18 +220,28 @@ class AttributeContainerMeta(type):
 @add_metaclass(AttributeContainerMeta)
 class AttributeContainer(object):
 
-    def __init__(self, **attributes):
+    def __init__(self, _user_instantiated=True, **attributes):
         # The `attribute_values` dictionary is used by the Attribute data descriptors in cls._attributes
         # to store the values that are bound to this instance. Attributes store values in the dictionary
         # using the `python_attr_name` as the dictionary key. "Raw" (i.e. non-subclassed) MapAttribute
         # instances do not have any Attributes defined and instead use this dictionary to store their
         # collection of name-value pairs.
         self.attribute_values = {}
-        self._set_defaults()
+        self._set_defaults(_user_instantiated=_user_instantiated)
         self._set_attributes(**attributes)
 
     @classmethod
     def _get_attributes(cls):
+        """
+        Returns the attributes of this class as a mapping from `python_attr_name` => `attribute`.
+
+        :rtype: dict[str, Attribute]
+        """
+        warnings.warn("`Model._get_attributes` is deprecated in favor of `Model.get_attributes` now")
+        return cls.get_attributes()
+
+    @classmethod
+    def get_attributes(cls):
         """
         Returns the attributes of this class as a mapping from `python_attr_name` => `attribute`.
 
@@ -235,12 +258,15 @@ class AttributeContainer(object):
         """
         return cls._dynamo_to_python_attrs.get(dynamo_key, dynamo_key)
 
-    def _set_defaults(self):
+    def _set_defaults(self, _user_instantiated=True):
         """
         Sets and fields that provide a default value
         """
-        for name, attr in self._get_attributes().items():
-            default = attr.default
+        for name, attr in self.get_attributes().items():
+            if _user_instantiated and attr.default_for_new is not None:
+                default = attr.default_for_new
+            else:
+                default = attr.default
             if callable(default):
                 value = default()
             else:
@@ -253,9 +279,17 @@ class AttributeContainer(object):
         Sets the attributes for this object
         """
         for attr_name, attr_value in six.iteritems(attributes):
-            if attr_name not in self._get_attributes():
+            if attr_name not in self.get_attributes():
                 raise ValueError("Attribute {0} specified does not exist".format(attr_name))
             setattr(self, attr_name, attr_value)
+
+    def __eq__(self, other):
+        # This is required for python 2 support so that MapAttribute can call this method.
+        return self is other
+
+    def __ne__(self, other):
+        # This is required for python 2 support so that MapAttribute can call this method.
+        return self is not other
 
 
 class SetMixin(object):
@@ -328,8 +362,11 @@ class BinarySetAttribute(SetMixin, Attribute):
         """
         Returns a decoded string from base64
         """
-        if value and len(value):
-            return set([b64decode(val.encode(DEFAULT_ENCODING)) for val in value])
+        try:
+            if value and len(value):
+                return set([b64decode(val.decode(DEFAULT_ENCODING)) for val in value])
+        except AttributeError:
+            return set([b64decode(val) for val in value])
 
 
 class UnicodeSetAttribute(SetMixin, Attribute):
@@ -468,7 +505,7 @@ class BooleanAttribute(Attribute):
         # previously, BOOL was serialized as N
         value_to_deserialize = super(BooleanAttribute, self).get_value(value)
         if value_to_deserialize is None:
-            value_to_deserialize = json.loads(value.get(NUMBER_SHORT, 0))
+            value_to_deserialize = json.loads(value.get(NUMBER_SHORT, '0'))
         return value_to_deserialize
 
 
@@ -497,6 +534,48 @@ class NumberAttribute(Attribute):
         Decode numbers from JSON
         """
         return json.loads(value)
+
+
+class TTLAttribute(Attribute):
+    """
+    A time-to-live attribute that signifies when the item expires and can be automatically deleted.
+    It can be assigned with a timezone-aware datetime value (for absolute expiry time)
+    or a timedelta value (for expiry relative to the current time),
+    but always reads as a UTC datetime value.
+    """
+    attr_type = NUMBER
+
+    def __set__(self, instance, value):
+        """
+        Converts assigned values to a UTC datetime
+        """
+        if isinstance(value, timedelta):
+            value = int(time.time() + timedelta_total_seconds(value))
+        elif isinstance(value, datetime):
+            if value.tzinfo is None:
+                raise ValueError("datetime must be timezone-aware")
+            value = calendar.timegm(value.utctimetuple())
+        elif value is not None:
+            raise ValueError("TTLAttribute value must be a timedelta or datetime")
+        attr_name = instance._dynamo_to_python_attrs.get(self.attr_name, self.attr_name)
+        if value is not None:
+            value = datetime.utcfromtimestamp(value).replace(tzinfo=tzutc())
+        instance.attribute_values[attr_name] = value
+
+    def serialize(self, value):
+        """
+        Serializes a datetime as a timestamp (Unix time).
+        """
+        if value is None:
+            return None
+        return json.dumps(calendar.timegm(value.utctimetuple()))
+
+    def deserialize(self, value):
+        """
+        Deserializes a timestamp (Unix time) as a UTC datetime.
+        """
+        timestamp = json.loads(value)
+        return datetime.utcfromtimestamp(timestamp).replace(tzinfo=tzutc())
 
 
 class UTCDateTimeAttribute(Attribute):
@@ -621,7 +700,7 @@ class MapAttribute(Attribute, AttributeContainer):
         #     cannot raise a ValueError (if this assumption is wrong, calling `_make_attribute` removes them)
         #   - the names of all attributes in self.attribute_kwargs match attributes defined on the class
         if self.attribute_kwargs and (
-                attributes or self.is_raw() or all(arg in self._get_attributes() for arg in self.attribute_kwargs)):
+                attributes or self.is_raw() or all(arg in self.get_attributes() for arg in self.attribute_kwargs)):
             self._set_attributes(**self.attribute_kwargs)
 
     def _is_attribute_container(self):
@@ -640,7 +719,7 @@ class MapAttribute(Attribute, AttributeContainer):
         del self.attribute_kwargs
         del self.attribute_values
         Attribute.__init__(self, **kwargs)
-        for name, attr in self._get_attributes().items():
+        for name, attr in self.get_attributes().items():
             # Set a local attribute with the same name that shadows the class attribute.
             # Because attr is a data descriptor and the attribute already exists on the class,
             # we have to store the local copy directly into __dict__ to prevent calling attr.__set__.
@@ -652,11 +731,21 @@ class MapAttribute(Attribute, AttributeContainer):
         # WARNING! This function is only intended to be called from the AttributeContainerMeta metaclass.
         if self._is_attribute_container():
             raise AssertionError("MapAttribute._update_attribute_paths called before MapAttribute._make_attribute")
-        for name in self._get_attributes().keys():
+        for name in self.get_attributes().keys():
             local_attr = self.__dict__[name]
             local_attr.attr_path.insert(0, path_segment)
             if isinstance(local_attr, MapAttribute):
                 local_attr._update_attribute_paths(path_segment)
+
+    def __eq__(self, other):
+        if self._is_attribute_container():
+            return AttributeContainer.__eq__(self, other)
+        return Attribute.__eq__(self, other)
+
+    def __ne__(self, other):
+        if self._is_attribute_container():
+            return AttributeContainer.__ne__(self, other)
+        return Attribute.__ne__(self, other)
 
     def __iter__(self):
         if self._is_attribute_container():
@@ -729,15 +818,13 @@ class MapAttribute(Attribute, AttributeContainer):
         return True  # TODO: check that the actual type of `value` meets requirements of `attr`
 
     def validate(self):
-        return all(self.is_correctly_typed(k, v) for k, v in six.iteritems(self._get_attributes()))
+        return all(self.is_correctly_typed(k, v) for k, v in six.iteritems(self.get_attributes()))
 
     def serialize(self, values):
         rval = {}
         for k in values:
             v = values[k]
-            # Continue to serialize NULL values in "raw" map attributes for backwards compatibility.
-            # This special case behavior for "raw" attribtues should be removed in the future.
-            if not self.is_raw() and v is None:
+            if self._should_skip(v):
                 continue
             attr_class = self._get_serialize_class(k, v)
             if attr_class is None:
@@ -748,10 +835,15 @@ class MapAttribute(Attribute, AttributeContainer):
                 attr_key = _get_key_for_serialize(v)
 
             # If this is a subclassed MapAttribute, there may be an alternate attr name
-            attr = self._get_attributes().get(k)
+            attr = self.get_attributes().get(k)
             attr_name = attr.attr_name if attr else k
 
-            rval[attr_name] = {attr_key: attr_class.serialize(v)}
+            serialized = attr_class.serialize(v)
+            if self._should_skip(serialized):
+                # Check after we serialize in case the serialized value is null
+                continue
+
+            rval[attr_name] = {attr_key: serialized}
 
         return rval
 
@@ -765,6 +857,8 @@ class MapAttribute(Attribute, AttributeContainer):
             attr_value = _get_value_for_deserialize(v)
             key = self._dynamo_to_python_attr(k)
             attr_class = self._get_deserialize_class(key, v)
+            if attr_class is None:
+                continue
             deserialized_value = None
             if attr_value is not None:
                 deserialized_value = attr_class.deserialize(attr_value)
@@ -786,16 +880,21 @@ class MapAttribute(Attribute, AttributeContainer):
             result[key] = value.as_dict() if isinstance(value, MapAttribute) else value
         return result
 
+    def _should_skip(self, value):
+        # Continue to serialize NULL values in "raw" map attributes for backwards compatibility.
+        # This special case behavior for "raw" attribtues should be removed in the future.
+        return not self.is_raw() and value is None
+
     @classmethod
     def _get_serialize_class(cls, key, value):
         if not cls.is_raw():
-            return cls._get_attributes().get(key)
+            return cls.get_attributes().get(key)
         return _get_class_for_serialize(value)
 
     @classmethod
     def _get_deserialize_class(cls, key, value):
         if not cls.is_raw():
-            return cls._get_attributes().get(key)
+            return cls.get_attributes().get(key)
         return _get_class_for_deserialize(value)
 
 
