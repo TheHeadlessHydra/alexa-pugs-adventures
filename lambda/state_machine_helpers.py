@@ -158,7 +158,7 @@ KEEPER_TRAPPER_BOARDROOM_TALK_TO_OGRE = "KeeperTrapperBoardroomTalkToOgre"
 KEEPER_TRAPPER_BOARDROOM_GIVE_COFFEE = "KeeperTrapperBoardroomGiveCoffee"
 
 # --------------- Keeper Trapper RnDnD ------------------
-KEEPER_TRAPPER_RNDND_INSPECT_WORKSTATION = "KeeprTrapperRndndInspectWorkstation"
+KEEPER_TRAPPER_RNDND_INSPECT_WORKSTATION = "KeeperTrapperRndndInspectWorkstation"
 KEEPER_TRAPPER_RNDND_TRAP_BEAR = "KeeperTrapperRndndBearRoom"
 KEEPER_TRAPPER_RNDND_INSPECT_MACHINE = "KeeperTrapperRndndInspectMachine"
 KEEPER_TRAPPER_RNDND_PRESS_BUTTON = "KeeperTrapperRndndPushButton"
