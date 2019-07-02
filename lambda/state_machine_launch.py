@@ -17,8 +17,8 @@ class LaunchRequest(State):
     """This is the beginning of the entire game for a user. For now, we start at the piranha paradise visitor center.
     """
 
-    def next(self, input_action, session_state):
-        return GoblinTownPugsHome().next(input_action, session_state)
+    def next(self, input_action, session_state, handler_input):
+        return GoblinTownPugsHome().next(input_action, session_state, handler_input)
 
 # --------------- State Machine Initializers ------------------
 
