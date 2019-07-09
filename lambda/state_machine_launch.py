@@ -130,8 +130,8 @@ class OptionsMenu(State):
             session.get_event_inventory().remove(Events.common_restart_the_game_are_you_sure)
             previous_game_state = session.get_previous_stored_game_state()
             session.set_stored_game_state(previous_game_state)
-            state_machine = rebuild_state_machine_from_session(session)
-            return state_machine.next(RETURN)
+            state_machine = rebuild_state_machine_from_session(session, session)
+            return state_machine.next(RETURN, handler_input)
         else:
             speech_output = wrap_with_speak(tldr_what_to_do)
 
